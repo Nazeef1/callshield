@@ -790,3 +790,6 @@ textarea.script-text { height: auto; min-height: 104px; padding: 10px 12px; line
   .lv-ctx { grid-column: 1 / -1; text-align: left; }
   .page-attack .status .rt-tag { display: none; }
 }
+
+/* Public Attack Lab: hidden upload controls */
+.submit-row[hidden], .or-sep[hidden] { display: none !important; }

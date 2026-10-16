@@ -58,6 +58,10 @@ class PublicLimiter:
         now = time.time()
         if kind == "enroll":
             limits = [("enroll:all", _env_int("CALLSHIELD_PUBLIC_ENROLLS_PER_HOUR", 4))]
+        elif kind == "clone":
+            ip = client_ip(request)
+            limits = [("clone:all", _env_int("CALLSHIELD_PUBLIC_CLONES_PER_HOUR", 10)),
+                      (f"clone:ip:{ip}", _env_int("CALLSHIELD_PUBLIC_CLONES_PER_IP", 4))]
         else:
             ip = client_ip(request)
             limits = [("check:all", _env_int("CALLSHIELD_PUBLIC_CHECKS_PER_HOUR", 8)),
@@ -67,7 +71,7 @@ class PublicLimiter:
                 q = self._prune(key, now)
                 if len(q) >= cap:
                     wait_min = max(1, int((WINDOW_SECONDS - (now - q[0])) // 60) + 1) if q else 60
-                    what = "voice enrollments" if kind == "enroll" else "live checks"
+                    what = {"enroll": "voice enrollments", "clone": "voice clones"}.get(kind, "live checks")
                     return False, (f"The public demo link allows a limited number of {what} per hour to protect "
                                    f"our DetectifAI credits. Try again in about {wait_min} min, or ask the team "
                                    "to run it on the presenter's laptop.")

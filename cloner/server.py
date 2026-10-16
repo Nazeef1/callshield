@@ -31,6 +31,21 @@ def _err(code: str, message: str, status: int) -> JSONResponse:
     return JSONResponse(status_code=status, content={"error": {"code": code, "message": message}})
 
 
+# Shared-secret guard. When CLONER_TOKEN is set (in .env, loaded by .config), every request must carry it in
+# X-Cloner-Token. This is what lets the cloner sit behind a public tunnel: only the CallShield backend knows it.
+_CLONER_TOKEN = os.environ.get("CLONER_TOKEN", "").strip()
+
+
+@app.middleware("http")
+async def _require_token(request, call_next):
+    if _CLONER_TOKEN:
+        import hmac
+        sent = request.headers.get("x-cloner-token", "")
+        if not hmac.compare_digest(sent.encode(), _CLONER_TOKEN.encode()):
+            return _err("unauthorized", "Missing or wrong X-Cloner-Token.", 401)
+    return await call_next(request)
+
+
 @app.get("/health")
 def health():
     try:
