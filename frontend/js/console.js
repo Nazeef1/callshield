@@ -270,14 +270,13 @@ function flashAction(action) {
 
 function renderAutoStatus() {
   const el = $('#auto-status');
-  if (!SR) { el.textContent = ''; return; }
-  if (!$('#auto-toggle').checked) { el.textContent = 'off — use the buttons'; el.className = 'auto-status'; return; }
+  if (!SR) { el.textContent = 'Live transcript is not available in this browser — open the page in Google Chrome.'; el.className = 'auto-status'; return; }
   const left = AUTO_COOLDOWN_MS - (Date.now() - lastAutoAt);
   if (pendingAuto) { el.textContent = 'keyword heard — waiting for 5 s of audio…'; el.className = 'auto-status armed'; }
   else if (inFlight) { el.textContent = 'check in progress…'; el.className = 'auto-status'; }
-  else if (left > 0) { el.textContent = `cooldown ${Math.ceil(left / 1000)} s`; el.className = 'auto-status'; }
-  else if (callActive) { el.textContent = 'armed — listening for transfer / SIM / OTP / limit / beneficiary'; el.className = 'auto-status armed'; }
-  else { el.textContent = 'armed when a call is active'; el.className = 'auto-status'; }
+  else if (left > 0) { el.textContent = `next check possible in ${Math.ceil(left / 1000)} s`; el.className = 'auto-status'; }
+  else if (callActive) { el.textContent = '● Listening — say a request with one of the keywords above'; el.className = 'auto-status armed'; }
+  else { el.textContent = 'Press Start call to begin listening.'; el.className = 'auto-status'; }
 }
 
 // ---------------------------------------------------------------- amount
@@ -801,6 +800,7 @@ function wire() {
   for (const r of $$('input[name="scenario"]')) r.addEventListener('change', () => sessionSet('cs.scenario', r.value));
   $('#upload-file').addEventListener('change', (e) => {
     uploadFile = e.target.files && e.target.files[0] ? e.target.files[0] : null;
+    $('#upload-action').value = 'fund_transfer';
     $('#upload-name').textContent = uploadFile ? `${uploadFile.name} · ${(uploadFile.size / 1024).toFixed(0)} KB` : 'No file chosen';
     $('#btn-upload').disabled = !uploadFile || inFlight;
   });
@@ -818,8 +818,7 @@ function wire() {
   // restore per-session preferences
   const lang = sessionGet('cs.lang');
   if (lang) $('#lang-select').value = lang;
-  const auto = sessionGet('cs.auto');
-  if (auto === '0') $('#auto-toggle').checked = false;
+  $('#auto-toggle').checked = true;  // checks are triggered by spoken keywords only
   const sc = sessionGet('cs.scenario');
   if (sc) { const r = document.querySelector(`input[name="scenario"][value="${sc}"]`); if (r) r.checked = true; }
 

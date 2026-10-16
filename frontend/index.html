@@ -20,6 +20,7 @@
     <a href="/" aria-current="page">Agent console</a>
     <a href="/enroll.html">Enroll voice</a>
     <a href="/phone.html" id="nav-phone" target="_blank" rel="noopener">Customer phone ↗</a>
+    <a href="/guide.html">How to use</a>
     <a href="/attack.html" id="nav-attack" class="nav-attack" hidden>Attack Lab</a>
   </nav>
   <div class="status">
@@ -75,12 +76,34 @@
     <p class="note" id="transcript-unsupported" hidden>Live transcript needs Chrome's speech recognition, which isn't available in this browser. Keyword auto-trigger is off — use the action buttons below.</p>
   </section>
 
-  <!-- ============ High-risk actions ============ -->
+  <!-- ============ Keyword trigger (speech only) ============ -->
   <section class="panel actions-panel" aria-labelledby="act-h">
     <div class="panel-head">
-      <h2 id="act-h">High-risk actions</h2>
+      <h2 id="act-h">Say it out loud</h2>
       <span class="cost-note" id="cost-note"></span>
     </div>
+    <div class="kw-guide">
+      <p class="kw-lead">Press <b>Start call</b>, talk for a few seconds, then ask for something risky. When CallShield
+        <b>hears one of these keywords</b> in the live transcript it checks the caller's voice automatically.</p>
+      <div class="kw-grid">
+        <div class="kw-card"><span class="kw-title">Fund transfer</span>
+          <span class="kw-words"><b>transfer</b> · <b>send money</b> · <b>UPI</b> · <b>NEFT</b> · <b>IMPS</b></span>
+          <span class="kw-eg">“Please <b>transfer</b> fifty thousand rupees to my brother.”</span></div>
+        <div class="kw-card"><span class="kw-title">SIM / OTP reset</span>
+          <span class="kw-words"><b>SIM</b> · <b>OTP</b> · <b>reset</b></span>
+          <span class="kw-eg">“I lost my phone, please <b>reset</b> my <b>OTP</b> to my new <b>SIM</b>.”</span></div>
+        <div class="kw-card"><span class="kw-title">Limit change</span>
+          <span class="kw-words"><b>limit</b></span>
+          <span class="kw-eg">“Increase my daily transfer <b>limit</b>, please.”</span></div>
+        <div class="kw-card"><span class="kw-title">Add beneficiary</span>
+          <span class="kw-words"><b>beneficiary</b> · <b>payee</b></span>
+          <span class="kw-eg">“I want to add a new <b>payee</b> to my account.”</span></div>
+      </div>
+      <p class="kw-tips">Tips: speak for <b>5+ seconds</b> before the keyword · one check every <b>30 s</b> ·
+        use <b>Google Chrome</b> and allow the microphone · Hindi works too (choose Hindi above).</p>
+      <span class="auto-status" id="auto-status"></span>
+    </div>
+    <div hidden>
     <div class="action-grid">
       <div class="transfer-cell">
         <button type="button" class="action-btn" data-action="fund_transfer"></button>
@@ -100,7 +123,7 @@
         <span class="switch-track"></span>
         <span>Keyword auto-trigger</span>
       </label>
-      <span class="auto-status" id="auto-status"></span>
+    </div>
     </div>
     <div class="mock-scenarios" id="mock-scenarios" hidden>
       <span class="label">Mock scenario</span>
@@ -112,10 +135,10 @@
       </div>
     </div>
     <div class="upload-row">
-      <span class="label">Check an uploaded clip <span class="faint">(e.g. a consented voice clone)</span></span>
+      <span class="label">Check a consented voice-clone file</span>
       <label class="btn btn-ghost btn-sm file-btn" id="upload-pick"><input type="file" id="upload-file" accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg,.flac"><span>Choose audio…</span></label>
       <span class="upload-name" id="upload-name">No file chosen</span>
-      <select id="upload-action" aria-label="Action for uploaded clip">
+      <select id="upload-action" aria-label="Action for uploaded clip" hidden>
         <option value="fund_transfer">Fund transfer</option>
         <option value="sim_otp_reset">SIM / OTP reset</option>
         <option value="limit_change">Limit change</option>
@@ -124,7 +147,7 @@
       <button type="button" class="btn btn-sm" id="btn-upload" disabled>Check clip</button>
     </div>
     <div class="upload-row" id="sample-row" hidden>
-      <span class="label">Or try a ready-made deepfake <span class="faint">(team-made clones, consented)</span></span>
+      <span class="label">Or try Zain's samples <span class="faint">(his real voice + his consented AI clones)</span></span>
       <select id="sample-pick" aria-label="Ready-made deepfake sample">
         <option value="">Choose a sample…</option>
       </select>
