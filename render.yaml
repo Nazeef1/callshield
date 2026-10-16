@@ -1,22 +1,19 @@
-# Render Blueprint for CallShield (agent console, enrollment, customer phone, Attack Lab).
-# Voice cloning itself runs on the presenter's GPU laptop (cloner on :8100) and is reached through a
-# token-protected Cloudflare tunnel. If the laptop is offline the Attack Lab shows "offline"; everything else works.
+# Render Blueprint for CallShield: agent console, voice enrollment, customer phone and ready-made
+# deepfake samples (frontend/samples). Runs fully in the cloud: no laptop needed.
+# Live voice cloning (Attack Lab) needs a GPU, so it is disabled here; the clones were generated
+# in advance from a consenting team member's own voice and ship as samples.
 services:
   - type: web
     name: callshield
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn backend.app:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips "*"
+    startCommand: uvicorn backend.app:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/status
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.7
       - key: CALLSHIELD_ATTACK_LAB
-        value: public          # judges can clone their OWN voice (mic only, consent, rate-limited)
-      - key: CALLSHIELD_CLONER_URL
-        value: https://cheapest-internal-ion-mario.trycloudflare.com   # changes if the laptop tunnel restarts
+        value: "0"
       - key: DETECTIF_API_KEY
-        sync: false            # paste in the Render dashboard; never committed
-      - key: CALLSHIELD_CLONER_TOKEN
-        sync: false            # paste the CLONER_TOKEN value from the laptop's .env
+        sync: false   # paste your DetectifAI key in the Render dashboard; never committed

@@ -1,15 +1,36 @@
 {
   "samples": [
     {
+      "id": "zain-real",
+      "label": "REAL: Zain himself asks for a ₹50,000 transfer (expect APPROVE)",
+      "file": "samples/zain_real_transfer.m4a",
+      "customer_id": "cust-zain-01",
+      "action": "fund_transfer"
+    },
+    {
+      "id": "zain-clone-transfer",
+      "label": "DEEPFAKE: AI clone of Zain asks for the same ₹50,000 transfer (expect BLOCK)",
+      "file": "samples/zain_clone_transfer.wav",
+      "customer_id": "cust-zain-01",
+      "action": "fund_transfer"
+    },
+    {
+      "id": "zain-clone-sim",
+      "label": "DEEPFAKE: AI clone of Zain asks for a SIM/OTP reset (expect BLOCK)",
+      "file": "samples/zain_clone_sim_reset.wav",
+      "customer_id": "cust-zain-01",
+      "action": "sim_otp_reset"
+    },
+    {
       "id": "ravi-gpu-clone",
-      "label": "AI clone of Ravi asks for a SIM/OTP reset (neural voice clone, Chatterbox)",
+      "label": "DEEPFAKE: AI clone of 'Ravi' asks for a SIM/OTP reset",
       "file": "samples/ravi_gpu_clone_sim_reset.wav",
       "customer_id": "test-tts-ravi",
       "action": "sim_otp_reset"
     },
     {
       "id": "ravi-robot",
-      "label": "Robotic text-to-speech 'Ravi' asks for a ₹50,000 transfer",
+      "label": "DEEPFAKE: robotic text-to-speech 'Ravi' asks for a ₹50,000 transfer",
       "file": "samples/ravi_robot_voice_transfer.wav",
       "customer_id": "test-tts-ravi",
       "action": "fund_transfer"
