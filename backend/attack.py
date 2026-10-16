@@ -54,6 +54,12 @@ def lab_env_enabled() -> bool:
     return (os.getenv("CALLSHIELD_ATTACK_LAB") or "1").strip() != "0"
 
 
+def lab_public() -> bool:
+    """CALLSHIELD_ATTACK_LAB=public: judges may use the lab from the deployed site (mic-recorded reference only,
+    consent required, rate-limited, clones never stored). Cloning still runs on the presenter's GPU laptop."""
+    return (os.getenv("CALLSHIELD_ATTACK_LAB") or "").strip().lower() == "public"
+
+
 def _host_only(value: str) -> str:
     """'localhost:8000' -> 'localhost', '[::1]:8000' -> '::1'."""
     value = (value or "").strip().lower()
@@ -68,6 +74,12 @@ def access_check(request: Request) -> tuple[bool, Optional[str]]:
     """(allowed, reason). Allowed only for requests made on this machine, not through a tunnel/proxy."""
     if not lab_env_enabled():
         return False, ENV_OFF_MESSAGE
+    if lab_public():
+        origin = request.headers.get("origin")
+        host = _host_only(request.headers.get("x-forwarded-host") or request.headers.get("host", ""))
+        if origin and origin != "null" and _host_only(urlsplit(origin).netloc) != host:
+            return False, "Cross-site requests to the Attack Lab are not allowed."
+        return True, None
     client = request.client.host if request.client else ""
     if (client or "").lower() not in LOOPBACK_HOSTS:
         return False, DISABLED_MESSAGE
@@ -99,15 +111,20 @@ class ClonerClient:
     def __init__(self, base_url: Optional[str] = None, timeout: float = CLONE_TIMEOUT,
                  transport: Optional[httpx.AsyncBaseTransport] = None):
         self.base_url = (base_url or os.getenv("CALLSHIELD_CLONER_URL") or DEFAULT_CLONER_URL).rstrip("/")
-        self._client = httpx.AsyncClient(base_url=self.base_url, timeout=httpx.Timeout(timeout, connect=5.0),
-                                         transport=transport, headers={"User-Agent": "CallShield-AttackLab/1.0"})
+        headers = {"User-Agent": "CallShield-AttackLab/1.0"}
+        token = (os.getenv("CALLSHIELD_CLONER_TOKEN") or "").strip()
+        if token:
+            headers["X-Cloner-Token"] = token
+        self._client = httpx.AsyncClient(base_url=self.base_url, timeout=httpx.Timeout(timeout, connect=10.0),
+                                         transport=transport, headers=headers)
 
     async def aclose(self) -> None:
         await self._client.aclose()
 
     def _unavailable(self) -> ClonerError:
+        where = "the presenter's GPU laptop" if lab_public() else self.base_url
         return ClonerError(503, "cloner_unavailable",
-                           f"The voice-cloning service isn't reachable at {self.base_url}. "
+                           f"The voice-cloning service isn't reachable at {where}. "
                            "Start it in another terminal with .\\run_cloner.ps1 and try again.")
 
     async def _request(self, method: str, path: str, *, timeout: Optional[float] = None, **kw) -> httpx.Response:
@@ -180,6 +197,8 @@ def _truthy(value) -> bool:
 
 def register(app: FastAPI, cloner: ClonerClient, frontend_dir: Path) -> None:
     """Add the /api/attack/* routes and a laptop-only /attack.html. Call BEFORE mounting the static frontend."""
+    from .public_limit import PublicLimiter
+    clone_limiter = PublicLimiter()
 
     @app.get("/api/attack/status")
     async def attack_status(request: Request, probe: int = 1):
@@ -194,7 +213,8 @@ def register(app: FastAPI, cloner: ClonerClient, frontend_dir: Path) -> None:
             except ClonerError as e:
                 cloner_error = {"code": e.code, "message": e.message}
         return JSONResponse({"enabled": True, "reason": None, "cloner": cloner_json, "cloner_error": cloner_error,
-                             "cloner_url": cloner.base_url, "mode": getattr(app.state, "mode", None),
+                             "cloner_url": None if lab_public() else cloner.base_url,
+                             "public": lab_public(), "mode": getattr(app.state, "mode", None),
                              "max_text_chars": MAX_TEXT_CHARS},
                             headers={"Cache-Control": "no-store"})
 
@@ -215,6 +235,9 @@ def register(app: FastAPI, cloner: ClonerClient, frontend_dir: Path) -> None:
         ok, reason = access_check(request)
         if not ok:
             return _forbidden(reason)
+        allowed, msg = clone_limiter.check(request, "clone")
+        if not allowed:
+            return _error(429, "public_limit", msg)
         try:
             form = await request.form(max_files=2, max_fields=10)
         except Exception:

@@ -51,6 +51,15 @@ async function loadLab() {
   } catch (e) {
     lab = { enabled: false, reason: e.code === 'network' ? 'Cannot reach the CallShield server.' : e.message, cloner: null };
   }
+  if (lab && lab.public) {
+    // Public (deployed) lab: mic recording only, so visitors can only clone the voice they speak in themselves.
+    const sep = document.querySelector('.or-sep');
+    const fileInput = $('#ref-file');
+    const row = fileInput && fileInput.closest('.submit-row');
+    if (sep) sep.hidden = true;
+    if (row) row.hidden = true;
+    if (fileInput) fileInput.disabled = true;
+  }
   renderLab();
 }
 
