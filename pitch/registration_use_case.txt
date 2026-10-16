@@ -1,0 +1,10 @@
+CallShield: registered use case (Track 01, Unclone Finance), restated for the DetectifAI slide
+
+WHO: The support agent on a bank / UPI helpline, at the moment a caller using the account holder's (cloned) voice asks for a high-risk action: a fund transfer, SIM/OTP reset, limit change or new beneficiary.
+WHICH: Both DetectifAI APIs in one request. Speaker Verification against the customer's enrolled voiceprint, and Deepfake Detection to flag a synthetic voice.
+WHAT CHANGES: The two signals feed a risk score that decides the action: APPROVE, STEP UP (extra verification) or BLOCK. On STEP UP or BLOCK the real customer is alerted on a trusted channel and can answer "Not me".
+
+Original registration text (unchanged user and problem):
+"We'll build CallShield, a real-time fraud guard for bank and UPI support calls. It streams live call audio to DetectifAI's deepfake detection API to flag synthetic voice segments, and runs speaker verification against the customer's enrolled voiceprint before any high-risk action like a fund transfer, SIM/OTP reset or limit change. Both signals feed a risk score that auto-blocks or escalates suspicious calls and alerts the real customer on a trusted channel."
+
+Refinement since registration (allowed by rule 3.7, user and problem unchanged): instead of streaming every second of the call, CallShield keeps a local rolling buffer and sends the caller's last few seconds to DetectifAI at the moment a high-risk action is requested. Same user, same moment, same decision, and DetectifAI credits are spent only where the risk is.

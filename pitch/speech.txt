@@ -1,0 +1,124 @@
+CALLSHIELD: PRESENTATION SPEECH (UNCLONE 2026, Track 01 Unclone Finance)
+Total: 3:00 = slides ~75 s + live demo ~95 s + ~10 s buffer
+Speakers: ZAIN (slides 1-3, impostor voice in demo) · NAZEEF (slides 4-5, drives the demo)
+Pace: about 150 words a minute. Pause briefly at every "·".
+
+======================================================================
+SLIDE 1: PROBLEM  (ZAIN · ~15 s)
+======================================================================
+"Meet a bank helpline agent.
+A caller sounds exactly like the customer: 'I lost my phone. Please reset my SIM and send the OTP to my new number.'
+But it isn't the customer. It's an AI clone, made from just twenty seconds of a voice note.
+Once that OTP moves, the money moves. And India lost over twenty-two thousand crore rupees to cyber fraud last year."
+
+[If asked about sources: Ministry of Home Affairs, Lok Sabha reply, July 2025. The 20 seconds is our own cloning test today.]
+
+======================================================================
+SLIDE 2: SOLUTION  (ZAIN · ~15 s)
+======================================================================
+"CallShield sits right on the agent's screen.
+It listens to the call. The moment the caller asks for something risky (a transfer, a SIM reset, a limit change or a new payee), it checks the last eight seconds of their voice and decides: approve, step up, or block.
+If it blocks, the real customer's phone is alerted instantly.
+That screenshot is a real, live result from today."
+
+======================================================================
+SLIDE 3: DETECTIFAI  (ZAIN · ~20 s)
+======================================================================
+"DetectifAI makes every decision. Take it out, and nothing gets decided.
+In one request we run two DetectifAI APIs: speaker verification ('is this the enrolled customer?') and deepfake detection ('is this voice human or AI?').
+A fake voice is blocked. A wrong speaker is blocked. If it's unsure, we step up and never wrongly block a real customer.
+And here's why we need both: our own AI clone fooled the voiceprint with a 0.81 match. Only deepfake detection caught it, at 0.998 fake.
+All the tools we used are listed at the bottom of the slide."
+
+---- hand over: "Nazeef will show you what happened when we tested it." ----
+
+======================================================================
+SLIDE 4: IMPACT  (NAZEEF · ~12 s)
+======================================================================
+"These are real results from today, every one a live DetectifAI call.
+Seven out of seven decisions correct, in about three seconds each.
+Genuine customers were approved. An impostor was blocked, and the real customer tapped 'Not me'.
+And the AI clone was blocked, even though it fooled the voiceprint."
+
+======================================================================
+SLIDE 5: SCALE + WHAT WE BUILT  (NAZEEF · ~15 s)
+======================================================================
+"It scales because the bank only pays when money is about to move: about seventy-five times fewer API calls than scanning whole calls. It plugs into the call-centre audio streams banks already use, like Exotel, Twilio and Genesys.
+What you'll see is a prototype, but it already does pretty much everything: live calls, both DetectifAI APIs, customer alerts, and our own voice-clone attack lab.
+Next, we turn it into a proper working web app and test it on real phone-line audio.
+Now, judge, let's try it with YOUR voice."
+
+======================================================================
+LIVE DEMO  (~95 s · NAZEEF drives the laptop · ZAIN is the impostor)
+======================================================================
+SETUP (ask for 40 seconds before the timer if allowed; otherwise do it during slides 1-3)
+NAZEEF: "Would you lend us your voice? We'll clone it to attack our own system, and delete it right after."
+  -> Get a clear YES (hackathon rule 5.3).
+  -> The judge reads the printed card for ~25 s (Windows Sound Recorder).
+  -> Upload the file to Enroll (ID: judge-01) AND to the Attack Lab (tick consent, choose the SIM/OTP reset script, Generate clone).
+  -> Phone page open in a second window. Keyword auto-trigger OFF.
+
+JUDGE CARD (print it):
+  "Hello, I'm calling my bank's helpline. I've been a customer here for many years and I mostly
+   use my account for UPI payments and paying bills. I'm recording this sample so the bank can
+   recognise my voice and stop anyone who pretends to be me on the phone."
+
+STEP 1: REAL VOICE → APPROVE (~25 s)
+  Click: Console → customer "judge-01" → Start call.
+  NAZEEF: "You're the customer now. Ask the bank for something."
+  JUDGE: "Hi, I'd like to increase my daily transfer limit, please."
+  Click: Limit change.
+  NAZEEF: "Real voice, and it matches your voiceprint, so it's approved. No false alarm for a genuine customer."
+
+STEP 2: IMPOSTOR → BLOCK (~25 s)
+  Same call, customer still "judge-01".
+  ZAIN (into the mic): "Hi, this is [judge's name]. Please transfer fifty thousand rupees to my brother."
+  Click: Fund transfer (₹50,000).
+  NAZEEF: "A real human voice, but not yours. Speaker verification says no match, so it's blocked.
+           And look: your phone just got the alert."
+
+STEP 3: YOUR CLONE → BLOCK (the climax, ~35 s)
+  Click: Attack Lab tab → play the clone.
+  NAZEEF: "This is you... except it isn't. We made this from your 25 seconds."
+  Click: Attack CallShield → target "judge-01" → SIM/OTP reset.
+  NAZEEF: "Look at the right-hand card: your clone MATCHED your voiceprint. Speaker verification alone would have let it in.
+           DetectifAI's deepfake check flagged it as synthetic. Blocked.
+           Your phone is buzzing. Please tap 'Not me'."
+
+CLOSE (~10 s)
+  NAZEEF (pointing at the audit log): "Three verdicts, each with a live DetectifAI request ID. Nothing pre-recorded.
+           And we're deleting your voiceprint now."
+  ZAIN: "CallShield. Your voice can be copied. Your account can't."
+
+======================================================================
+IF SOMETHING GOES WRONG
+======================================================================
+- "Too quiet, keep talking": speak closer for 6+ seconds (no credits spent).
+- Real voice gets STEP UP instead of APPROVE: "When unsure, we step up. We never block a genuine customer." (that's a feature)
+- Clone not ready: use Zain's pre-made clone, target cust-zain-01.
+- Judge declines consent: run the same 3 steps with Zain as the customer (cust-zain-01), Nazeef as the impostor, Zain's clone.
+- Wi-Fi drops: switch to a phone hotspot (DetectifAI needs internet).
+
+======================================================================
+QUICK Q&A (BOTH must be able to answer)
+======================================================================
+Q: Why not just use OTP?
+A: The attack IS the OTP: the fraudster calls to move the OTP to their SIM. We check the voice before that happens.
+
+Q: What about false positives?
+A: Unsure results become STEP UP (extra verification), never BLOCK. Our genuine callers were approved 2 out of 2.
+
+Q: How fast is it?
+A: About 3 seconds from the request to the decision, all live.
+
+Q: What does it cost?
+A: Two DetectifAI operations only at risky moments, not every minute of every call. About 75 times fewer calls.
+
+Q: Phone-quality audio or Hindi?
+A: That's Day 2: we test 8 kHz phone audio and add Hindi triggers. DetectifAI already routes Hindi.
+
+Q: Do you store voices?
+A: We store results and request IDs, not audio. Clones live only in the browser tab, and voiceprints can be deleted.
+
+Q: What if the fraudster stays silent?
+A: No voice, no approval: a too-short clip becomes a STEP UP (Day 2 policy).

@@ -1,0 +1,18 @@
+{
+  "samples": [
+    {
+      "id": "ravi-gpu-clone",
+      "label": "AI clone of Ravi asks for a SIM/OTP reset (neural voice clone, Chatterbox)",
+      "file": "samples/ravi_gpu_clone_sim_reset.wav",
+      "customer_id": "test-tts-ravi",
+      "action": "sim_otp_reset"
+    },
+    {
+      "id": "ravi-robot",
+      "label": "Robotic text-to-speech 'Ravi' asks for a ₹50,000 transfer",
+      "file": "samples/ravi_robot_voice_transfer.wav",
+      "customer_id": "test-tts-ravi",
+      "action": "fund_transfer"
+    }
+  ]
+}
