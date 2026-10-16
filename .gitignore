@@ -1,0 +1,12 @@
+.env
+api_key_*.txt
+.venv/
+node_modules/
+__pycache__/
+testdata/
+pitch/build/node_modules/
+data/
+cloner/.venv/
+cloner/.cache/
+docs/
+*.pyc

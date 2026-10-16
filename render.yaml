@@ -1,0 +1,17 @@
+# Render Blueprint for the CallShield web app (agent console, enrollment, customer phone).
+# The GPU voice cloner (Attack Lab) is NOT deployed: it only runs on the presenter's laptop.
+services:
+  - type: web
+    name: callshield
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/status
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: CALLSHIELD_ATTACK_LAB
+        value: "0"
+      - key: DETECTIF_API_KEY
+        sync: false   # entered by you in the Render dashboard, never committed
