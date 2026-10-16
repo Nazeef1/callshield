@@ -20,20 +20,6 @@
       "file": "samples/zain_clone_sim_reset.wav",
       "customer_id": "cust-zain-01",
       "action": "sim_otp_reset"
-    },
-    {
-      "id": "ravi-gpu-clone",
-      "label": "DEEPFAKE: AI clone of 'Ravi' asks for a SIM/OTP reset",
-      "file": "samples/ravi_gpu_clone_sim_reset.wav",
-      "customer_id": "test-tts-ravi",
-      "action": "sim_otp_reset"
-    },
-    {
-      "id": "ravi-robot",
-      "label": "DEEPFAKE: robotic text-to-speech 'Ravi' asks for a ₹50,000 transfer",
-      "file": "samples/ravi_robot_voice_transfer.wav",
-      "customer_id": "test-tts-ravi",
-      "action": "fund_transfer"
     }
   ]
 }
