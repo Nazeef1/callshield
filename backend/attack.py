@@ -214,7 +214,8 @@ def register(app: FastAPI, cloner: ClonerClient, frontend_dir: Path) -> None:
                 cloner_error = {"code": e.code, "message": e.message}
         return JSONResponse({"enabled": True, "reason": None, "cloner": cloner_json, "cloner_error": cloner_error,
                              "cloner_url": None if lab_public() else cloner.base_url,
-                             "public": lab_public(), "mode": getattr(app.state, "mode", None),
+                             "public": lab_public() and any(h in request.headers for h in PROXY_HEADERS),
+                             "mode": getattr(app.state, "mode", None),
                              "max_text_chars": MAX_TEXT_CHARS},
                             headers={"Cache-Control": "no-store"})
 
