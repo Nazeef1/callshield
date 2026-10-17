@@ -928,5 +928,24 @@ class CreateAppTests(unittest.TestCase):
             run(cloner.aclose())
 
 
+class PublicLimiterSweepTests(unittest.TestCase):
+    def test_expired_visitors_are_forgotten(self):
+        from unittest import mock
+        from starlette.requests import Request
+        from backend import public_limit
+
+        def tunnel(ip):
+            return Request({"type": "http", "headers": [(b"cf-connecting-ip", ip.encode())], "client": (ip, 1)})
+
+        lim = public_limit.PublicLimiter()
+        with mock.patch.object(public_limit.time, "time", return_value=1000.0):
+            for i in range(5):
+                lim.check(tunnel(f"10.0.0.{i}"), "check")
+        self.assertEqual(len(lim._events), 6)  # check:all + one bucket per visitor
+        later = 1000.0 + public_limit.WINDOW_SECONDS + 1
+        with mock.patch.object(public_limit.time, "time", return_value=later):
+            self.assertTrue(lim.check(tunnel("10.0.0.99"), "check")[0])
+        self.assertEqual(set(lim._events), {"check:all", "check:ip:10.0.0.99"})
+
 if __name__ == "__main__":
     unittest.main()
