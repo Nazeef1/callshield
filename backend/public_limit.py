@@ -51,6 +51,12 @@ class PublicLimiter:
             q.popleft()
         return q
 
+    def _sweep(self, now: float) -> None:
+        """Forget visitors whose uses have all aged out, so one-off IPs don't pile up for the server's lifetime."""
+        for key in list(self._events):
+            if not self._prune(key, now):
+                del self._events[key]
+
     def check(self, request: Request, kind: str) -> tuple[bool, str | None]:
         """Returns (allowed, message). Records the use when allowed."""
         if not is_public(request):
@@ -67,6 +73,7 @@ class PublicLimiter:
             limits = [("check:all", _env_int("CALLSHIELD_PUBLIC_CHECKS_PER_HOUR", 8)),
                       (f"check:ip:{ip}", _env_int("CALLSHIELD_PUBLIC_CHECKS_PER_IP", 4))]
         with self._lock:
+            self._sweep(now)
             for key, cap in limits:
                 q = self._prune(key, now)
                 if len(q) >= cap:
