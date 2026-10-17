@@ -1,16 +1,17 @@
 """Browser-to-browser helpline calls: WebSocket signaling relay for WebRTC.
 
-The caller page (phone) dials, every connected agent console rings, the first agent to answer gets the
-call. The server only relays setup messages (SDP offer/answer, ICE candidates) and the caller's live
-transcript; the audio itself flows peer to peer between the two browsers.
+The caller (phone app or Attack Lab) dials, every connected receive screen rings, the first agent to answer
+gets the call. The server only relays setup messages (SDP offer/answer, ICE candidates) and the agent's call
+state; the audio itself flows peer to peer between the two browsers.
 
     WS /api/call/ws?role=caller|agent[&code=...]
 
-caller -> server : dial {customer_id, display_name} | signal {data} | transcript {text, final} | hangup
-agent  -> server : accept {caller_id} | decline {caller_id} | signal {data} | hangup
-server -> agent  : incoming {caller_id, customer_id, display_name} | cancel {caller_id} | taken {caller_id}
-                   | signal {data} | transcript {text, final} | hangup
-server -> caller : ringing | no_agent | accepted | declined | signal {data} | hangup
+caller -> server : dial {customer_id, display_name} | signal {data} | hangup
+agent  -> server : accept {caller_id} | decline {caller_id} | signal {data} | state {state, text?} | hangup
+server -> agent  : hello {id} | incoming {caller_id, customer_id, display_name} | cancel {caller_id}
+                   | taken {caller_id} | signal {data} | hangup
+server -> caller : hello {id} | ringing | no_agent | accepted | declined | signal {data} | state {state, text}
+                   | hangup
 
 If CALLSHIELD_CALL_CODE is set, both sides must pass it as ?code= (closed with 4401 otherwise).
 """
@@ -23,7 +24,8 @@ from typing import Optional
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
-MAX_TEXT = 1000
+MAX_STATE = 40
+MAX_STATE_TEXT = 300
 
 
 class Peer:
@@ -113,11 +115,13 @@ class CallRelay:
                 return
             await p.send({"type": "ringing"})
             await self.to_agents(self.incoming(p))
-        elif kind == "transcript" and p.partner is not None:
-            await p.partner.send({"type": "transcript", "text": str(msg.get("text") or "")[:MAX_TEXT],
-                                  "final": bool(msg.get("final"))})
 
     async def handle_agent(self, p: Peer, kind, msg: dict) -> None:
+        if kind == "state":
+            if p.partner is not None:
+                await p.partner.send({"type": "state", "state": str(msg.get("state") or "")[:MAX_STATE],
+                                      "text": str(msg.get("text") or "")[:MAX_STATE_TEXT]})
+            return
         c = self.callers.get(str(msg.get("caller_id") or ""))
         if kind == "accept":
             if p.partner is not None:

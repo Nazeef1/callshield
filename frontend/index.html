@@ -3,242 +3,146 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CallShield · Agent Console</title>
-<meta name="description" content="CallShield — real-time voice-clone fraud guard for bank support calls. Powered by DetectifAI.">
+<title>CallShield · Receive</title>
+<meta name="description" content="CallShield bank helpline: a virtual agent answers every call and checks the caller's voice with DetectifAI.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2.5l11 4v8.2c0 6.6-4.6 12.2-11 14.3C9.6 26.9 5 21.3 5 14.7V6.5l11-4z' fill='%23d4ff2a'/%3E%3Cpath d='M9.5 16h2.5l1.6-4 2.6 8 2.3-6 1.3 2h2.7' fill='none' stroke='%230f1115' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/css/app.css">
-<script type="module" src="/js/console.js"></script>
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/receive.css">
+<script type="module" src="/js/receive.js"></script>
 </head>
-<body class="page-console">
-<div id="mock-banner" class="mock-banner" hidden>Mock mode — results on this screen are simulated, not live DetectifAI results</div>
+<body class="page-receive">
 <header class="topbar">
   <a class="brand" href="/" aria-label="CallShield home">
     <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.5l11 4v8.2c0 6.6-4.6 12.2-11 14.3C9.6 26.9 5 21.3 5 14.7V6.5l11-4z" fill="#d4ff2a"/><path d="M9.5 16h2.5l1.6-4 2.6 8 2.3-6 1.3 2h2.7" fill="none" stroke="#0f1115" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    <span class="brand-text"><span class="brand-name">CallShield</span><span class="brand-sub">Powered by <b>DetectifAI</b></span></span>
+    <span>CallShield<small>Powered by DetectifAI</small></span>
   </a>
-  <nav class="nav" aria-label="Pages">
-    <a href="/" aria-current="page">Agent console</a>
-    <a href="/enroll.html">Enroll voice</a>
-    <a href="/phone.html" id="nav-phone" target="_blank" rel="noopener">Customer phone ↗</a>
-    <a href="/caller.html" target="_blank" rel="noopener">Caller ↗</a>
-    <a href="/guide.html">How to use</a>
-    <a href="/attack.html" id="nav-attack" class="nav-attack" hidden>Attack Lab</a>
+  <nav class="topbar-nav" aria-label="Pages">
+    <a href="/" aria-current="page">Receive</a>
+    <a href="/attack.html" id="nav-attack" hidden>Attack Lab</a>
   </nav>
-  <div class="status">
-    <span id="sse-dot" class="sse-dot" title="Live event stream"></span>
-    <span id="mode-pill" class="pill">Connecting…</span>
-    <div class="credits"><span class="credits-val" id="credits-val">—</span><span class="credits-sub" id="checks-left">credits</span></div>
+  <div class="topbar-status">
+    <span class="status-item" id="st-detectif" title="DetectifAI">
+      <span class="dot" id="st-health"></span><span class="status-label">DetectifAI</span>
+      <span class="mono" id="st-credits">—</span>
+    </span>
+    <span class="status-item" id="st-line" title="Phone line">
+      <span class="dot" id="st-line-dot"></span><span id="st-line-text">Line offline</span>
+    </span>
   </div>
 </header>
 
-<main class="console-grid">
-  <!-- ============ Live call ============ -->
-  <section class="panel call-panel" aria-labelledby="call-h">
-    <div class="panel-head">
-      <h2 id="call-h">Live call</h2>
-      <span id="call-state" class="call-state">Idle</span>
-      <span id="call-timer" class="mono call-timer">00:00</span>
-    </div>
-    <div class="call-controls">
-      <label class="field">
-        <span class="label">Caller claims to be</span>
-        <select id="customer-select" aria-label="Customer the caller claims to be">
-          <option value="">Unknown caller (deepfake check only)</option>
-        </select>
-      </label>
-      <button id="btn-start" type="button" class="btn btn-accent btn-lg"></button>
-      <button id="btn-end" type="button" class="btn btn-danger-ghost btn-lg" hidden></button>
-    </div>
-    <p class="customer-hint" id="customer-hint"></p>
-    <div class="incoming" id="incoming" hidden>
-      <span class="incoming-who" id="incoming-who"></span>
-      <button id="btn-answer" type="button" class="btn btn-accent">Answer</button>
-      <button id="btn-decline" type="button" class="btn btn-danger-ghost">Decline</button>
-    </div>
-    <p class="note" id="phone-line">Phone line: connecting…</p>
-    <div class="wave-wrap">
-      <canvas id="wave" class="wave" aria-label="Caller audio waveform, last 10 seconds"></canvas>
-      <div class="wave-overlay" id="wave-empty">Start the call to capture the caller's audio</div>
-    </div>
-    <div class="wave-scale"><span>−10 s</span><span id="wave-window-label">check window: last 8 s</span><span>now</span></div>
-    <div class="buffer-row">
-      <div class="buffer-meter" title="Audio buffered for the next check (minimum 5 s)">
-        <div class="buffer-fill" id="buffer-fill"></div>
-        <div class="buffer-min" style="left:62.5%"></div>
-      </div>
-      <span class="buffer-label" id="buffer-label">buffer: 0.0 s</span>
-      <span class="level" title="Mic level"><span id="level-fill"></span></span>
-    </div>
-    <div class="transcript-wrap" id="transcript-wrap">
-      <div class="transcript-head">
-        <span class="label">Live transcript</span>
-        <select id="lang-select" aria-label="Transcript language">
-          <option value="en-IN">English (India)</option>
-          <option value="hi-IN">हिन्दी (hi-IN)</option>
-        </select>
-      </div>
-      <div class="transcript" id="transcript" aria-live="polite"><span class="faint">Transcript appears here during the call. Phrases like “transfer ₹50,000”, “new SIM”, “increase my limit” or “add a beneficiary” auto-trigger a check.</span></div>
-      <div class="transcript-note" id="transcript-note"></div>
-    </div>
-    <p class="note" id="transcript-unsupported" hidden>Live transcript needs Chrome's speech recognition, which isn't available in this browser. Keyword auto-trigger is off — use the action buttons below.</p>
+<main class="page stack">
+  <section class="card hero" id="hero" aria-labelledby="hero-h">
+    <h1 id="hero-h">Bank helpline</h1>
+    <p class="muted">Neerja, the virtual agent, answers every call, hears the request and checks the caller's voice before anything goes ahead.</p>
+    <button type="button" class="btn btn-primary btn-lg" id="btn-online"></button>
   </section>
 
-  <!-- ============ Keyword trigger (speech only) ============ -->
-  <section class="panel actions-panel" aria-labelledby="act-h">
-    <div class="panel-head">
-      <h2 id="act-h">Say it out loud</h2>
-      <span class="cost-note" id="cost-note"></span>
-    </div>
-    <div class="kw-guide">
-      <p class="kw-lead">Press <b>Start call</b>, talk for a few seconds, then ask for something risky. When CallShield
-        <b>hears one of these keywords</b> in the live transcript it checks the caller's voice automatically.</p>
-      <div class="kw-grid">
-        <div class="kw-card"><span class="kw-title">Fund transfer</span>
-          <span class="kw-words"><b>transfer</b> · <b>send money</b> · <b>UPI</b> · <b>NEFT</b> · <b>IMPS</b></span>
-          <span class="kw-eg">“Please <b>transfer</b> fifty thousand rupees to my brother.”</span></div>
-        <div class="kw-card"><span class="kw-title">SIM / OTP reset</span>
-          <span class="kw-words"><b>SIM</b> · <b>OTP</b> · <b>reset</b></span>
-          <span class="kw-eg">“I lost my phone, please <b>reset</b> my <b>OTP</b> to my new <b>SIM</b>.”</span></div>
-        <div class="kw-card"><span class="kw-title">Limit change</span>
-          <span class="kw-words"><b>limit</b></span>
-          <span class="kw-eg">“Increase my daily transfer <b>limit</b>, please.”</span></div>
-        <div class="kw-card"><span class="kw-title">Add beneficiary</span>
-          <span class="kw-words"><b>beneficiary</b> · <b>payee</b></span>
-          <span class="kw-eg">“I want to add a new <b>payee</b> to my account.”</span></div>
-      </div>
-      <p class="kw-tips">Tips: speak for <b>5+ seconds</b> before the keyword · one check every <b>30 s</b> ·
-        use <b>Google Chrome</b> and allow the microphone · Hindi works too (choose Hindi above).</p>
-      <span class="auto-status" id="auto-status"></span>
-    </div>
-    <div id="manual-actions" hidden>
-    <p class="note">Phone call: the transcript comes from the caller's phone. If it misses the keyword, trigger the check here.</p>
-    <div class="action-grid">
-      <div class="transfer-cell">
-        <button type="button" class="action-btn" data-action="fund_transfer"></button>
-        <label class="amount" title="Transfer amount (INR)">
-          <span>₹</span>
-          <input id="amount" type="number" min="1" step="1" value="50000" inputmode="numeric" aria-label="Transfer amount in rupees">
-          <small id="amount-fmt">₹50,000</small>
-        </label>
-      </div>
-      <button type="button" class="action-btn" data-action="sim_otp_reset"></button>
-      <button type="button" class="action-btn" data-action="limit_change"></button>
-      <button type="button" class="action-btn" data-action="beneficiary_add"></button>
-    </div>
-    <div class="action-options">
-      <label class="switch" id="auto-wrap">
-        <input type="checkbox" id="auto-toggle" checked>
-        <span class="switch-track"></span>
-        <span>Keyword auto-trigger</span>
-      </label>
-    </div>
-    </div>
-    <div class="mock-scenarios" id="mock-scenarios" hidden>
-      <span class="label">Mock scenario</span>
-      <div class="segmented" role="radiogroup" aria-label="Mock scenario">
-        <label data-tone="ok"><input type="radio" name="scenario" value="genuine" checked><span>Genuine</span></label>
-        <label data-tone="danger"><input type="radio" name="scenario" value="deepfake"><span>Deepfake</span></label>
-        <label data-tone="danger"><input type="radio" name="scenario" value="imposter"><span>Imposter</span></label>
-        <label data-tone="warn"><input type="radio" name="scenario" value="uncertain"><span>Uncertain</span></label>
-      </div>
-    </div>
-    <div class="upload-row">
-      <span class="label">Check a consented voice-clone file</span>
-      <label class="btn btn-ghost btn-sm file-btn" id="upload-pick"><input type="file" id="upload-file" accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg,.flac"><span>Choose audio…</span></label>
-      <span class="upload-name" id="upload-name">No file chosen</span>
-      <select id="upload-action" aria-label="Action for uploaded clip" hidden>
-        <option value="fund_transfer">Fund transfer</option>
-        <option value="sim_otp_reset">SIM / OTP reset</option>
-        <option value="limit_change">Limit change</option>
-        <option value="beneficiary_add">Add beneficiary</option>
-      </select>
-      <button type="button" class="btn btn-sm" id="btn-upload" disabled>Check clip</button>
-    </div>
-    <div class="upload-row" id="sample-row" hidden>
-      <span class="label">Or try Zain's samples <span class="faint">(his real voice + his consented AI clones)</span></span>
-      <select id="sample-pick" aria-label="Ready-made deepfake sample">
-        <option value="">Choose a sample…</option>
-      </select>
-      <button type="button" class="btn btn-ghost btn-sm" id="btn-sample-play" disabled>▶ Listen</button>
-    </div>
+  <section class="online-bar" id="online-bar" hidden aria-live="polite">
+    <span class="dot live"></span>
+    <span><b>Online</b> <span class="muted">· Neerja answers calls</span></span>
+    <span class="spacer"></span>
+    <button type="button" class="btn btn-ghost btn-sm" id="btn-offline">Go offline</button>
   </section>
 
-  <!-- ============ Verdict ============ -->
-  <section class="panel verdict-panel" aria-labelledby="verdict-h">
-    <div class="panel-head">
-      <h2 id="verdict-h">Verdict</h2>
-      <span id="verdict-badge"></span>
-      <span class="spacer"></span>
-      <span class="muted small mono" id="verdict-time"></span>
-    </div>
-    <div class="verdict-body" aria-live="polite">
-      <div class="verdict-idle" id="verdict-idle">
-        <span id="idle-icon"></span>
-        <h3>No check yet</h3>
-        <p>Start a call. When the caller asks for a high-risk action, CallShield checks the last 8 seconds of their voice: <b>is it real</b>, and <b>is it really the customer</b>?</p>
+  <div class="receive-grid">
+    <!-- live call -->
+    <section class="card call-card" aria-labelledby="call-h">
+      <div class="card-head">
+        <h2 class="card-title" id="call-h">Live call</h2>
+        <span class="spacer"></span>
+        <span class="badge neutral" id="call-badge" hidden></span>
       </div>
-      <div class="verdict-busy" id="verdict-busy" hidden>
-        <div class="spinner big-spinner"></div>
-        <h3 id="busy-title">Analysing caller voice…</h3>
-        <div class="busy-timer" id="busy-timer">0.0 s</div>
-        <ul class="busy-steps" id="busy-steps"></ul>
+
+      <div class="empty" id="call-idle">
+        <span id="call-idle-icon"></span>
+        <h3 id="call-idle-title">Offline</h3>
+        <p class="small" id="call-idle-sub">Go online to take calls.</p>
       </div>
-      <div class="verdict-result" id="verdict-result" hidden>
-        <div class="decision-banner" id="decision-banner">
-          <div class="decision-icon" id="decision-icon"></div>
+
+      <div class="ringing" id="call-ringing" hidden>
+        <span class="ring-icon" id="ring-icon"></span>
+        <div>
+          <h3 id="ring-who">Incoming call</h3>
+          <p class="muted small" id="ring-sub">Neerja is picking up…</p>
+        </div>
+      </div>
+
+      <div class="call-live stack" id="call-live" hidden>
+        <div class="caller-row">
+          <span class="avatar" id="caller-avatar"></span>
+          <div class="caller-id">
+            <b id="caller-name">Caller</b>
+            <span class="faint small mono" id="caller-cid"></span>
+          </div>
+          <span class="spacer"></span>
+          <span class="level" title="Caller audio level" aria-hidden="true"><span id="level-fill"></span></span>
+          <span class="mono muted" id="call-timer">00:00</span>
+        </div>
+        <div class="convo" id="convo" aria-live="polite" aria-label="Conversation"></div>
+        <div class="row call-actions" id="call-actions">
+          <button type="button" class="btn" id="btn-takeover" hidden></button>
+          <span class="spacer"></span>
+          <button type="button" class="btn btn-danger" id="btn-end"></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- verdict -->
+    <section class="card verdict-card" aria-labelledby="verdict-h">
+      <div class="card-head">
+        <h2 class="card-title" id="verdict-h">Verdict</h2>
+        <span class="spacer"></span>
+        <span class="faint small mono" id="verdict-time"></span>
+      </div>
+      <div aria-live="polite">
+        <div class="empty" id="verdict-idle">
+          <span id="verdict-idle-icon"></span>
+          <h3>No checks yet</h3>
+          <p class="small">The verdict for the next call appears here.</p>
+        </div>
+        <div class="verdict-busy" id="verdict-busy" hidden>
+          <span class="spinner" aria-hidden="true"></span>
           <div>
-            <div class="decision-word" id="decision-word"></div>
-            <div class="decision-sub" id="decision-sub"></div>
+            <h3>Checking the caller's voice</h3>
+            <p class="muted small" id="busy-sub"></p>
           </div>
-          <div class="decision-ctx" id="decision-ctx"></div>
+          <span class="spacer"></span>
+          <span class="mono muted small" id="busy-timer">0.0 s</span>
         </div>
-        <div class="verdict-row">
-          <div class="card gauge-card">
-            <div class="gauge">
-              <svg viewBox="0 0 200 112" aria-hidden="true">
-                <path class="g-track" d="M20 100 A80 80 0 0 1 180 100" pathLength="100" stroke="rgba(46,204,113,0.25)" stroke-dasharray="35 200"/>
-                <path class="g-track" d="M20 100 A80 80 0 0 1 180 100" pathLength="100" stroke="rgba(255,176,32,0.25)" stroke-dasharray="0 35 35 200"/>
-                <path class="g-track" d="M20 100 A80 80 0 0 1 180 100" pathLength="100" stroke="rgba(255,77,61,0.25)" stroke-dasharray="0 70 30 200"/>
-                <path class="g-value" id="gauge-value" d="M20 100 A80 80 0 0 1 180 100" pathLength="100" stroke="#9aa3b2" stroke-dasharray="100 200" stroke-dashoffset="100"/>
-                <text class="g-tick" x="20" y="111" text-anchor="middle">0</text>
-                <text class="g-tick" x="180" y="111" text-anchor="middle">100</text>
-              </svg>
-              <div class="gauge-num"><span id="risk-num">0</span><small>risk score</small></div>
+        <div class="verdict-result stack" id="verdict-result" hidden>
+          <div class="decision" id="decision">
+            <span class="decision-icon" id="decision-icon"></span>
+            <div>
+              <div class="decision-word" id="decision-word"></div>
+              <div class="decision-sub" id="decision-sub"></div>
             </div>
-            <span class="chip neutral gauge-level" id="risk-level">—</span>
           </div>
-          <div class="card">
-            <h3>Why</h3>
-            <ul class="reasons" id="reasons"></ul>
-            <div class="alert-line" id="alert-line"></div>
+          <div class="request-line" id="request-line"></div>
+          <div class="signals">
+            <div class="signal" id="sig-voice"></div>
+            <div class="signal" id="sig-deepfake"></div>
           </div>
-        </div>
-        <div class="signals">
-          <div class="card signal-card" id="sig-deepfake"></div>
-          <div class="card signal-card" id="sig-speaker"></div>
-        </div>
-        <div class="verdict-foot">
-          <div class="proof" id="proof"></div>
-          <div class="feedback" id="feedback"></div>
+          <ul class="reasons" id="reasons"></ul>
+          <div class="alert-line small" id="alert-line"></div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
+  </div>
 
-  <!-- ============ Audit log ============ -->
-  <section class="panel log-panel" aria-labelledby="log-h">
-    <div class="panel-head">
-      <h2 id="log-h">Audit log</h2>
-      <span class="muted small" id="log-count"></span>
+  <!-- recent calls -->
+  <section class="card recent-card" aria-labelledby="recent-h">
+    <div class="card-head">
+      <h2 class="card-title" id="recent-h">Recent calls</h2>
       <span class="spacer"></span>
-      <span class="faint small">Click a row to view its verdict</span>
+      <span class="faint small">Select a row to see its verdict</span>
     </div>
     <div class="table-wrap">
-      <table class="data log">
+      <table class="recent">
         <thead>
-          <tr><th>Time</th><th>Customer</th><th>Action</th><th>Decision</th><th>Risk</th><th>Trigger</th><th>Mode</th><th>Customer reply</th></tr>
+          <tr><th>Time</th><th>Customer</th><th>Request</th><th>Decision</th><th class="col-sig">Voice match</th><th class="col-sig">Deepfake</th><th>Customer reply</th></tr>
         </thead>
-        <tbody id="log-body"><tr><td colspan="8" class="empty">No assessments yet.</td></tr></tbody>
+        <tbody id="recent-body"></tbody>
       </table>
     </div>
   </section>

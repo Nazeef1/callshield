@@ -1,8 +1,8 @@
-// CallShield — transcript keyword rules + Indian-English amount parsing for auto-trigger.
+// CallShield — request keywords + Indian-English amount parsing for the virtual agent.
 // Pure functions (no DOM), so they can be unit-tested in Node.
 
 // Order matters: more specific intents first ("transfer limit" -> limit_change).
-export const RULES = [
+const RULES = [
   {
     action: 'beneficiary_add',
     re: /\b(?:beneficiar(?:y|ies)|payees?|add (?:a |an |one |new )?(?:account|payee))\b|लाभार्थी|बेनिफिशियरी|पेयी/i,
@@ -29,27 +29,6 @@ export function detectAction(text) {
     if (m) return { action: r.action, match: m[0] };
   }
   return null;
-}
-
-/** Character ranges of every keyword hit, for highlighting. */
-export function keywordRanges(text) {
-  const ranges = [];
-  for (const r of RULES) {
-    const g = new RegExp(r.re.source, 'gi');
-    let m;
-    while ((m = g.exec(text))) {
-      if (!m[0]) { g.lastIndex++; continue; }
-      ranges.push([m.index, m.index + m[0].length]);
-    }
-  }
-  ranges.sort((a, b) => a[0] - b[0]);
-  const merged = [];
-  for (const rg of ranges) {
-    const last = merged[merged.length - 1];
-    if (last && rg[0] <= last[1]) last[1] = Math.max(last[1], rg[1]);
-    else merged.push([rg[0], rg[1]]);
-  }
-  return merged;
 }
 
 const SMALL = {

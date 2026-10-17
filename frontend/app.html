@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d12">
+<meta name="color-scheme" content="dark">
+<title>CallShield Bank</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2.5l11 4v8.2c0 6.6-4.6 12.2-11 14.3C9.6 26.9 5 21.3 5 14.7V6.5l11-4z' fill='%23d4ff2a'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/phone-app.css">
+<script type="module" src="/js/app.js"></script>
+</head>
+<body class="page-app">
+<div class="app">
+  <header class="app-bar">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.5l11 4v8.2c0 6.6-4.6 12.2-11 14.3C9.6 26.9 5 21.3 5 14.7V6.5l11-4z" fill="#d4ff2a"/><path d="M9.5 16h2.5l1.6-4 2.6 8 2.3-6 1.3 2h2.7" fill="none" stroke="#0f1115" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span class="app-bar-name">CallShield Bank</span>
+    <button class="bell" id="btn-bell" type="button" aria-label="Alerts" hidden><span data-icon="bell"></span><span class="bell-count" id="bell-count" hidden></span></button>
+  </header>
+
+  <!-- welcome -->
+  <section class="screen" id="scr-welcome" hidden>
+    <div class="hero">
+      <svg class="hero-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.5l11 4v8.2c0 6.6-4.6 12.2-11 14.3C9.6 26.9 5 21.3 5 14.7V6.5l11-4z" fill="#d4ff2a"/><path d="M9.5 16h2.5l1.6-4 2.6 8 2.3-6 1.3 2h2.7" fill="none" stroke="#0f1115" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <h1>CallShield Bank</h1>
+      <p class="lead">Your voice keeps your account safe when you call the bank.</p>
+    </div>
+    <ul class="points">
+      <li><span class="point-icon" data-icon="mic"></span><span><b>Enroll your voice once</b><small>About 30 seconds, right here in the app</small></span></li>
+      <li><span class="point-icon" data-icon="phone"></span><span><b>Call the bank</b><small>Your voice is checked while you talk</small></span></li>
+      <li><span class="point-icon" data-icon="bell"></span><span><b>Get alerts</b><small>If anyone calls pretending to be you</small></span></li>
+    </ul>
+    <div class="screen-foot">
+      <button id="btn-start" class="btn btn-primary btn-lg btn-block" type="button">Get started</button>
+    </div>
+  </section>
+
+  <!-- 1. your account -->
+  <section class="screen" id="scr-account" hidden>
+    <form id="form-account" class="screen-form" novalidate>
+      <div class="screen-head">
+        <span class="step">Step 1 of 2</span>
+        <h1>Your account</h1>
+        <p class="lead">The bank uses this to find your voiceprint when you call.</p>
+      </div>
+      <label class="field"><span class="label">Your name</span><input id="in-name" autocomplete="name" autocapitalize="words" maxlength="40" placeholder="e.g. Zain"></label>
+      <label class="field"><span class="label">Last 4 digits of your phone number</span><input id="in-last4" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="off" placeholder="e.g. 6767"></label>
+      <p class="form-error" id="setup-error" role="alert"></p>
+      <div class="screen-foot">
+        <button class="btn btn-primary btn-lg btn-block" type="submit">Continue</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- 2. enroll your voice -->
+  <section class="screen" id="scr-enroll" hidden>
+    <div class="screen-head">
+      <span class="step" id="enroll-step">Step 2 of 2</span>
+      <h1 id="enroll-title">Enroll your voice</h1>
+      <p class="lead">The bank's assistant will ask you to read a short text aloud. We save it as your voiceprint, so the bank can recognise you on calls.</p>
+    </div>
+    <div class="enroll-art" data-icon="mic"></div>
+    <ul class="tips">
+      <li>Takes about 30 seconds</li>
+      <li>Find a quiet spot</li>
+      <li>Read at your normal pace</li>
+    </ul>
+    <p class="form-error" id="enroll-error" role="alert"></p>
+    <div class="screen-foot">
+      <button id="btn-enroll" class="btn btn-primary btn-lg btn-block" type="button">Start recording</button>
+      <button id="btn-enroll-back" class="btn btn-ghost btn-lg btn-block" type="button">Not now</button>
+    </div>
+  </section>
+
+  <!-- recording the voiceprint (in the app, no call) -->
+  <section class="screen" id="scr-record" hidden>
+    <div class="rec-head">
+      <span class="rec-dot" id="rec-dot"></span>
+      <span class="rec-status" id="rec-status">Getting ready</span>
+      <span class="lvl" id="rec-lvl" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+    </div>
+    <p class="rec-hint" id="rec-hint"></p>
+    <div class="script" id="rec-script"></div>
+    <div class="rec-progress">
+      <div class="meter"><div class="meter-fill" id="rec-fill"></div></div>
+      <span class="small muted mono" id="rec-progress"></span>
+    </div>
+    <div class="screen-foot">
+      <button id="btn-rec-cancel" class="btn btn-lg btn-block" type="button">Cancel</button>
+    </div>
+  </section>
+
+  <!-- home -->
+  <section class="screen" id="scr-home" hidden>
+    <div class="greet">
+      <h1>Hi, <span id="home-name"></span></h1>
+      <span class="badge ok"><span data-icon="shieldCheck"></span>Voice enrolled</span>
+    </div>
+    <div class="call-block">
+      <button id="btn-call" class="btn btn-primary btn-call btn-block" type="button"><span data-icon="phone"></span>Call CallShield Bank</button>
+      <p class="line-state"><span class="dot" id="line-dot"></span><span id="line-text">Connecting to the bank…</span></p>
+    </div>
+    <div class="card pass-card" id="pass-card" hidden>
+      <span class="label">Your passphrase</span>
+      <p class="pass-text" id="home-pass"></p>
+      <p class="small muted">Say it when the assistant asks to verify your voice.</p>
+    </div>
+    <section class="alerts" id="alerts" aria-labelledby="alerts-title">
+      <div class="alerts-head">
+        <h2 id="alerts-title">Alerts</h2>
+        <span class="badge danger" id="alerts-count" hidden></span>
+      </div>
+      <div class="alert-list" id="alert-list"></div>
+    </section>
+    <div class="home-links">
+      <button id="btn-reenroll" class="btn btn-ghost" type="button">Re-enroll voice</button>
+      <button id="btn-switch" class="btn btn-ghost" type="button">Switch account</button>
+    </div>
+  </section>
+
+  <!-- in a call -->
+  <section class="screen screen-call" id="scr-call" hidden>
+    <div class="call-top">
+      <div class="avatar" id="call-avatar">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.5l11 4v8.2c0 6.6-4.6 12.2-11 14.3C9.6 26.9 5 21.3 5 14.7V6.5l11-4z" fill="#d4ff2a"/><path d="M9.5 16h2.5l1.6-4 2.6 8 2.3-6 1.3 2h2.7" fill="none" stroke="#0f1115" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h2 class="call-name">CallShield Bank</h2>
+      <div class="call-timer mono" id="call-timer"></div>
+    </div>
+    <div class="call-mid" aria-live="polite">
+      <div class="call-icon" id="call-icon"></div>
+      <p class="call-status" id="call-status">Calling…</p>
+      <p class="call-caption" id="call-caption"></p>
+      <div class="pass-panel" id="call-pass" hidden>
+        <span class="label">Your passphrase</span>
+        <p class="pass-text" id="call-pass-text"></p>
+      </div>
+    </div>
+    <div class="call-foot">
+      <div class="you-level" aria-hidden="true"><span data-icon="mic"></span><span class="lvl" id="mic-lvl"><i></i><i></i><i></i><i></i><i></i></span></div>
+      <button id="btn-hangup" class="hangup" type="button" aria-label="Hang up"><span data-icon="phone"></span></button>
+      <span class="small muted">Hang up</span>
+    </div>
+  </section>
+</div>
+</body>
+</html>

@@ -4,180 +4,128 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CallShield · Attack Lab</title>
-<meta name="description" content="CallShield Attack Lab — clone your own voice (with consent) and see whether CallShield stops it. Local red-team only.">
+<meta name="description" content="CallShield Attack Lab — emulate a fraud call to the bank's virtual agent. Laptop-only red-team tool.">
 <meta name="robots" content="noindex">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2.5l11 4v8.2c0 6.6-4.6 12.2-11 14.3C9.6 26.9 5 21.3 5 14.7V6.5l11-4z' fill='%23ff4d3d'/%3E%3Cpath d='M9.5 16h2.5l1.6-4 2.6 8 2.3-6 1.3 2h2.7' fill='none' stroke='%230f1115' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="/css/app.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 2.5l11 4v8.2c0 6.6-4.6 12.2-11 14.3C9.6 26.9 5 21.3 5 14.7V6.5l11-4z' fill='%23d4ff2a'/%3E%3Cpath d='M9.5 16h2.5l1.6-4 2.6 8 2.3-6 1.3 2h2.7' fill='none' stroke='%230f1115' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/css/base.css">
+<link rel="stylesheet" href="/css/attack.css">
 <script type="module" src="/js/attack.js"></script>
 </head>
 <body class="page-attack">
-<div id="mock-banner" class="mock-banner" hidden>Mock mode — CallShield verdicts on this screen are simulated, not live DetectifAI results</div>
 <header class="topbar">
   <a class="brand" href="/" aria-label="CallShield home">
     <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><path d="M16 2.5l11 4v8.2c0 6.6-4.6 12.2-11 14.3C9.6 26.9 5 21.3 5 14.7V6.5l11-4z" fill="#d4ff2a"/><path d="M9.5 16h2.5l1.6-4 2.6 8 2.3-6 1.3 2h2.7" fill="none" stroke="#0f1115" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    <span class="brand-text"><span class="brand-name">CallShield</span><span class="brand-sub">Powered by <b>DetectifAI</b></span></span>
+    <span>CallShield<small>Attack Lab · laptop only</small></span>
   </a>
-  <nav class="nav" aria-label="Pages">
-    <a href="/">Agent console</a>
-    <a href="/enroll.html">Enroll voice</a>
-    <a href="/phone.html" target="_blank" rel="noopener">Customer phone ↗</a>
-    <a href="/guide.html">How to use</a>
-    <a href="/attack.html" id="nav-attack" class="nav-attack" aria-current="page">Attack Lab</a>
+  <nav class="topbar-nav" aria-label="Pages">
+    <a href="/">Receive</a>
+    <a href="/attack.html" aria-current="page">Attack Lab</a>
   </nav>
-  <div class="status">
-    <span class="rt-tag" title="This page only works on the presenter's laptop (localhost). It is hidden and blocked on the public link.">RED TEAM · local only</span>
-    <span id="mode-pill" class="pill">Connecting…</span>
-    <div class="credits"><span class="credits-val" id="credits-val">—</span><span class="credits-sub" id="checks-left">credits</span></div>
+  <div class="topbar-status">
+    <span class="dot" id="cloner-dot"></span>
+    <span id="cloner-pill">Cloner…</span>
   </div>
 </header>
 
-<main class="lab-grid" id="lab">
-  <!-- ============ Intro + cloner status ============ -->
-  <section class="panel lab-intro" aria-labelledby="intro-h">
-    <div class="lab-intro-text">
-      <h1 id="intro-h"><span class="rt-tag">RED TEAM</span> Attack Lab</h1>
-      <p class="lab-lede">Fraudsters need <b>~20 s of your voice</b> from a reel or voice note. Clone your own voice here and see if CallShield stops it.</p>
-      <p class="faint small">Only clone <b>your own</b> voice, with your consent (hackathon rule 5.3). Clones stay in this browser tab — nothing is stored on the server.</p>
+<main class="page lab">
+  <div class="lab-intro">
+    <h1>Attack Lab</h1>
+    <p class="muted">Emulate a fraud call to the bank's virtual agent. Pick a victim, give the call a request clip and a passphrase clip, then dial the receive screen — CallShield decides whether the attack gets through.</p>
+    <p class="faint small">Ethics: only clone a voice you own and consent to cloning. Nothing is stored on the server.</p>
+  </div>
+
+  <!-- ============ Step 1 · Target ============ -->
+  <section class="card" aria-labelledby="s1-h">
+    <div class="card-head">
+      <span class="step-no">1</span>
+      <div><div class="card-title" id="s1-h">Target</div><div class="card-sub">The enrolled customer the fraudster pretends to be.</div></div>
     </div>
-    <div class="cloner-box" id="cloner-box" aria-live="polite">
-      <div class="label">Voice cloner</div>
-      <div class="cloner-state" id="cloner-state"><span class="spinner"></span> Checking…</div>
-      <div class="cloner-engines" id="cloner-engines"></div>
-      <div class="cloner-actions">
+    <div class="stack">
+      <label class="field">
+        <span class="label">Victim</span>
+        <select id="target" aria-label="Victim customer"></select>
+      </label>
+      <div class="passphrase-box" id="passphrase-box" hidden>
+        <span class="label">Passphrase the bank will ask for</span>
+        <p class="passphrase-text" id="passphrase-text"></p>
+      </div>
+      <p class="empty-inline muted small" id="target-empty" hidden>No customers enrolled. Enrol a voice in the phone app first.</p>
+    </div>
+  </section>
+
+  <!-- ============ Step 2 · Voice ============ -->
+  <section class="card" aria-labelledby="s2-h">
+    <div class="card-head">
+      <span class="step-no">2</span>
+      <div><div class="card-title" id="s2-h">Voice for the call</div><div class="card-sub">Two clips: what the fraudster asks for, and the victim's passphrase.</div></div>
+    </div>
+
+    <div class="cloner-strip" id="cloner-strip" aria-live="polite">
+      <div class="row">
+        <span class="label">Voice cloner</span>
+        <span id="cloner-state" class="muted small">Checking…</span>
+        <span class="spacer"></span>
         <button type="button" class="btn btn-ghost btn-sm" id="btn-recheck">Re-check</button>
         <button type="button" class="btn btn-ghost btn-sm" id="btn-warmup" hidden>Warm up GPU model</button>
       </div>
+      <div class="cloner-engines small muted" id="cloner-engines"></div>
     </div>
-  </section>
 
-  <section class="panel lab-disabled" id="lab-disabled" hidden>
-    <h2>Attack Lab unavailable</h2>
-    <p id="lab-disabled-reason">The Attack Lab only runs on the presenter's laptop.</p>
-    <p><a href="/">← Back to the agent console</a></p>
-  </section>
-
-  <!-- ============ Step 1: reference voice ============ -->
-  <section class="panel lab-ref" aria-labelledby="ref-h">
-    <div class="panel-head"><h2 id="ref-h">1 · Your reference voice</h2><span class="spacer"></span><span class="muted small">15–40 s · what a fraudster scrapes</span></div>
-    <div>
-      <span class="label">Read this aloud at a natural pace (~25 s)</span>
-      <blockquote class="passage lab-passage" id="ref-passage">Hi, I'm recording this for a CallShield test. On weekends I like to cook for my family — usually something simple like dal, rice and a vegetable curry. Most days I take the metro to college and listen to podcasts about technology and cricket on the way. Last month I finally learned to make proper filter coffee, and now I can't start my morning without it.</blockquote>
-    </div>
-    <div class="rec-box">
-      <div class="rec-top">
-        <button type="button" class="btn btn-danger btn-lg rec-btn" id="btn-rec">Record my voice</button>
-        <div class="rec-timer" id="rec-timer">0.0 <small>s</small></div>
-        <div class="grow">
-          <div class="label">Mic level</div>
-          <span class="level rec-level"><span id="rec-level"></span></span>
-        </div>
+    <div class="ref-block" id="ref-block">
+      <div class="row"><span class="label">Reference voice for cloning</span><span class="faint small">shared by both clips · a consenting person reads the text below (~25 s)</span></div>
+      <div class="ref-controls">
+        <button type="button" class="btn btn-danger" id="btn-rec">Record reference</button>
+        <div class="rec-meter" aria-hidden="true"><span id="rec-level"></span></div>
+        <span class="rec-timer mono" id="rec-timer">0.0 s</span>
+        <span class="or">or</span>
+        <label class="btn btn-ghost file-btn"><input type="file" id="ref-file" accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg,.flac"><span>Upload a clip</span></label>
       </div>
-      <div class="rec-progress" aria-hidden="true">
-        <div class="rec-progress-fill" id="rec-fill"></div>
-        <div class="rec-mark" style="left:37.5%"><span>15 s min</span></div>
-        <div class="rec-mark" style="left:50%"><span>20 s</span></div>
-        <div class="rec-mark end" style="left:calc(100% - 2px)"><span>40 s auto-stop</span></div>
+      <div class="rec-status small muted" id="rec-status">Record 15–40 s, or upload a 6–60 s clip of your own voice.</div>
+      <div class="ref-script">
+        <span class="label">Read this aloud while recording</span>
+        <p>Hello, this is a short recording of my normal speaking voice. I usually call my bank on weekday mornings,
+          around nine or ten o'clock. Last month I paid my electricity bill, sent money to my brother for his college
+          fees, and asked about the limit on my debit card. My phone number ends in six, seven, six, seven. Thank you
+          for your help, and have a good day.</p>
       </div>
-      <div class="rec-status" id="rec-status">Record 15–40 s of your own voice. Recording stops automatically at 40 s.</div>
-      <div class="or-sep">or</div>
-      <div class="submit-row">
-        <label class="btn btn-ghost file-btn"><input type="file" id="ref-file" accept="audio/*,.wav,.mp3,.m4a,.webm,.ogg,.flac"><span>Upload a voice note / reel audio…</span></label>
-        <span class="muted small">your own voice only · 6–60 s</span>
-      </div>
-      <div class="take" id="ref-take" hidden>
-        <span class="chip neutral" id="ref-label">Reference</span>
+      <div class="ref-take row" id="ref-take" hidden>
+        <span class="badge ok" id="ref-label">Reference</span>
         <audio id="ref-preview" controls preload="metadata"></audio>
         <button type="button" class="btn btn-ghost btn-sm" id="btn-ref-discard">Discard</button>
       </div>
+      <label class="consent" id="consent-wrap">
+        <input type="checkbox" id="consent">
+        <span>This is my own voice and I consent to cloning it for this test.</span>
+      </label>
     </div>
-    <label class="consent" id="consent-wrap">
-      <input type="checkbox" id="consent">
-      <span><b>This is my own voice and I consent to cloning it for this test.</b><small>Required. The clone is generated only for this red-team test and is not stored by CallShield.</small></span>
-    </label>
+
+    <div class="clips" id="clips"></div>
   </section>
 
-  <!-- ============ Step 2: fraudster script + clone ============ -->
-  <section class="panel lab-script" aria-labelledby="script-h">
-    <div class="panel-head"><h2 id="script-h">2 · Fraudster script</h2><span class="spacer"></span><span class="muted small mono" id="script-count">0 / 400</span></div>
-    <div class="script-chips" id="script-chips" role="group" aria-label="Quick-pick fraud scripts"></div>
-    <textarea id="script" class="script-text" rows="4" maxlength="400" spellcheck="true" aria-label="What the clone should say"></textarea>
-    <div class="engine-row">
-      <span class="label">Cloning engine</span>
-      <div class="segmented" role="radiogroup" aria-label="Cloning engine" id="engine-seg">
-        <label><input type="radio" name="engine" value="local" checked><span>Local GPU model</span></label>
-        <label><input type="radio" name="engine" value="elevenlabs"><span>ElevenLabs</span></label>
+  <!-- ============ Step 3 · Call ============ -->
+  <section class="card" aria-labelledby="s3-h">
+    <div class="card-head">
+      <span class="step-no">3</span>
+      <div><div class="card-title" id="s3-h">Place the call</div><div class="card-sub">Dials the receive screen like the phone app. Needs the bank online (Go online on <a href="/">Receive</a>).</div></div>
+    </div>
+    <div class="stack">
+      <div class="row">
+        <button type="button" class="btn btn-primary btn-lg" id="btn-call" disabled>Place call</button>
+        <button type="button" class="btn btn-danger btn-lg" id="btn-hangup" hidden>Hang up</button>
+        <span class="muted small" id="call-hint">Pick a victim and set both clips first.</span>
       </div>
-      <span class="muted small" id="engine-note"></span>
-    </div>
-    <div class="submit-row">
-      <button type="button" class="btn btn-danger btn-lg" id="btn-clone" disabled>Generate clone</button>
-      <span class="muted small" id="clone-hint">Add your reference voice and tick consent first.</span>
-    </div>
-    <div class="clone-busy" id="clone-busy" hidden>
-      <span class="spinner"></span>
-      <span>Cloning your voice… <b class="mono" id="clone-elapsed">0.0 s</b></span>
-      <span class="faint small" id="clone-busy-note"></span>
-    </div>
-    <div class="clone-result" id="clone-result" hidden>
-      <div class="clone-head">
-        <span class="chip danger">Voice clone</span>
-        <span class="muted small mono" id="clone-meta"></span>
-      </div>
-      <audio id="clone-audio" controls preload="auto"></audio>
-      <div class="clone-actions">
-        <a class="btn btn-ghost btn-sm" id="clone-download" download="callshield-clone.wav">Download WAV</a>
-        <button type="button" class="btn btn-sm btn-danger-ghost" id="btn-play-live">Play into live call</button>
-        <a class="small" href="/" target="_blank" rel="noopener">Open Agent Console ↗</a>
-      </div>
-      <p class="note small" id="play-hint">Theatre mode: start a call in the Agent Console (another tab or window, same laptop), then press <b>Play into live call</b> — the clone plays through the speakers at full volume and the console's mic picks it up. Keep the console call running. If the console barely hears it (Chrome's echo cancellation can suppress audio the browser itself plays), play the downloaded WAV from a phone held next to the mic.</p>
-    </div>
-  </section>
 
-  <!-- ============ Step 3: attack CallShield ============ -->
-  <section class="panel lab-attack" aria-labelledby="attack-h">
-    <div class="panel-head">
-      <h2 id="attack-h">3 · Attack CallShield</h2>
-      <span class="spacer"></span>
-      <span class="cost-note" id="cost-note"></span>
-    </div>
-    <div class="attack-controls">
-      <label class="field">
-        <span class="label">Caller claims to be</span>
-        <select id="target" aria-label="Customer the clone claims to be">
-          <option value="">Unknown caller (deepfake check only)</option>
-        </select>
-      </label>
-      <label class="field">
-        <span class="label">High-risk action</span>
-        <select id="lab-action" aria-label="High-risk action">
-          <option value="fund_transfer">Fund transfer</option>
-          <option value="sim_otp_reset">SIM / OTP reset</option>
-          <option value="limit_change">Limit change</option>
-          <option value="beneficiary_add">Add beneficiary</option>
-        </select>
-      </label>
-      <label class="field amount-field" id="amount-wrap">
-        <span class="label">Amount (₹)</span>
-        <input id="lab-amount" type="number" min="1" step="1" value="50000" inputmode="numeric" aria-label="Transfer amount in rupees">
-      </label>
-    </div>
-    <p class="customer-hint" id="target-hint"></p>
-    <div class="attack-buttons">
-      <button type="button" class="btn btn-danger btn-lg" id="btn-attack" disabled>Attack CallShield with the clone</button>
-      <button type="button" class="btn btn-ghost btn-lg" id="btn-compare" disabled>Compare with your real voice</button>
-      <span class="muted small" id="attack-hint">Generate a clone first.</span>
-    </div>
-    <div class="compare-grid">
-      <div class="lab-verdict" id="v-real">
-        <div class="lv-title"><span class="chip ok">Real voice</span><span class="faint small">your reference recording</span></div>
-        <div class="lv-body lv-empty">Run <b>Compare with your real voice</b> to check the reference itself as the same customer.</div>
+      <ol class="tracker" id="tracker"></ol>
+      <div class="state-line" id="state-line" hidden><span class="dot live"></span><span id="state-text"></span></div>
+
+      <div class="row manual" id="manual" hidden>
+        <span class="label">Manual</span>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-play-request">Play request</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-play-passphrase">Play passphrase</button>
       </div>
-      <div class="lab-verdict" id="v-clone">
-        <div class="lv-title"><span class="chip danger">Clone</span><span class="faint small">synthetic copy of your voice</span></div>
-        <div class="lv-body lv-empty">Run <b>Attack CallShield</b> to send the clone through the real check.</div>
-      </div>
+
+      <div class="outcome" id="outcome" hidden></div>
     </div>
-    <div class="compare-summary" id="compare-summary" hidden></div>
   </section>
 </main>
 </body>

@@ -1,0 +1,21 @@
+{
+ "greeting": "8bf7ccc95c4c2b26c3787dd2396bc197aaab1112",
+ "didnt_catch": "5cb61c432fb4ec39d259651c4380148807350920",
+ "ack_fund_transfer": "9a4e226565326795dbeeb798263794f9232f83e3",
+ "ack_sim_otp_reset": "78e4ccaeb19ca96826c48cc21c5253eb5682156d",
+ "ack_limit_change": "3da8e017a7317f426ffec9994422a7786d8a5aa7",
+ "ack_beneficiary_add": "f8d11fa2497db63e072970648b9f026ace2587bb",
+ "passphrase": "38707d41d55dcc26ef71620941233c1a62a4465b",
+ "passphrase_retry": "d698ab772c368e511b784f7b508e9520083951bd",
+ "verifying": "ed31de6a5cac659a46053c195e90beb05a539afc",
+ "approve": "6d436e22c1d0f1fa7fce756c98567cfb2bbe14e9",
+ "step_up": "3c45d936cb9006da09443bf59d21dec2256fcb98",
+ "block": "39b13b92f44e096f6685629083eeaded19a625e4",
+ "handoff": "bdc47eaf7a39a1af232d94b735d98fa1195373ed",
+ "error": "8e550d4a355566fe44a45b343b6ecca0ef183b3b",
+ "enroll_welcome": "f1dd567be0c1f7f80b9dc4e4640b85d886dd7c83",
+ "enroll_keep_reading": "565838aa6df443f2c1e4c8642281e67151281e39",
+ "enroll_hold": "639ad75a61940dd147096a99d83c5cbc152324f2",
+ "enroll_done": "16e496d584ac04fa76f5ec8b159573ac7c7c2012",
+ "enroll_failed": "e73d73c14932da4d662df1939211a757b237cc3f"
+}

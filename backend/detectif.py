@@ -1,12 +1,13 @@
-"""DetectifAI client: async live client (httpx) + mock client with the same interface.
+"""DetectifAI client (async, httpx) and response normalisation.
 
-Live endpoints (base https://platform.detectif.ai):
+Endpoints (base https://platform.detectif.ai):
   GET  /v1/health, /v1/credits, /v1/speakers                  (free)
+  DELETE /v1/speakers/{speaker_id}                            (free; deletes the voiceprint permanently)
   POST /v1/speakers/enroll, /v1/speakers/verify, /v1/deepfake/detect   (50 credits per check)
   POST /v1/operations/{operation_id}/feedback                 (free)
 
-Every paid call gets a fresh uuid4 Idempotency-Key; on 429/503 we wait for Retry-After and
-retry ONCE with the same key, so a retry can never be charged twice.
+Every paid call gets a fresh uuid4 Idempotency-Key. On 429/503 (after Retry-After), 502/504 and network
+errors (after 1 s) or a timeout we retry ONCE with the same key, so a retry can never be charged twice.
 
 The API key is only ever placed in the Authorization header. It is never logged, never part of
 an exception message and never part of repr().
@@ -14,7 +15,6 @@ an exception message and never part of repr().
 from __future__ import annotations
 
 import asyncio
-import random
 import re
 import uuid
 from datetime import datetime, timezone
@@ -23,8 +23,6 @@ from typing import Any, Awaitable, Callable, Optional
 from urllib.parse import quote
 
 import httpx
-
-from .audio import wav_duration
 
 DEFAULT_BASE_URL = "https://platform.detectif.ai"
 SPEAKER_ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
@@ -92,8 +90,6 @@ def _error_from_response(resp: httpx.Response) -> DetectifError:
 
 
 class LiveClient:
-    mode = "live"
-
     def __init__(self, api_key: str, base_url: Optional[str] = None, timeout: float = 60.0,
                  transport: Optional[httpx.AsyncBaseTransport] = None,
                  sleep: Callable[[float], Awaitable[Any]] = asyncio.sleep,
@@ -125,14 +121,24 @@ class LiveClient:
                 resp = await self._client.request(method, path, data=data, files=files, json=json_body,
                                                   params=params, headers=headers)
             except httpx.TimeoutException:
+                if attempt == 0:
+                    continue  # same headers -> same Idempotency-Key: a retry can't run the check twice
                 raise DetectifError(0, "timeout", "DetectifAI did not respond in time") from None
             except httpx.HTTPError as exc:
+                if attempt == 0:
+                    await self._sleep(1.0)
+                    continue
                 raise DetectifError(0, "network_error",
                                     f"Could not reach DetectifAI ({type(exc).__name__})") from None
+            if resp.status_code in (502, 504) and attempt == 0:
+                await self._sleep(1.0)
+                continue
             if resp.status_code in (429, 503) and attempt == 0:
                 await self._sleep(_parse_retry_after(resp.headers.get("Retry-After"), cap=self._max_retry_wait))
                 continue  # same headers -> same Idempotency-Key
             if 200 <= resp.status_code < 300:
+                if resp.status_code == 204 or not resp.content:
+                    return {}
                 try:
                     body = resp.json()
                 except Exception:
@@ -168,6 +174,9 @@ class LiveClient:
         return await self._request("POST", f"/v1/operations/{quote(str(operation_id), safe='')}/feedback",
                                    json_body={"correct": bool(correct)})
 
+    async def delete_speaker(self, speaker_id: str) -> dict:
+        return await self._request("DELETE", f"/v1/speakers/{quote(str(speaker_id), safe='')}")
+
     # ---- paid endpoints (50 credits per completed check) -------------------
     @staticmethod
     def _file(file_bytes: bytes, filename: Optional[str], content_type: Optional[str]) -> dict:
@@ -182,19 +191,18 @@ class LiveClient:
                                    files=self._file(file_bytes, filename, content_type))
 
     async def verify(self, file_bytes: bytes, filename: Optional[str], content_type: Optional[str],
-                     speaker_id: str, detect_deepfake: bool = True, scenario: Optional[str] = None) -> dict:
+                     speaker_id: str, detect_deepfake: bool = True) -> dict:
         data = {"speaker_id": speaker_id, "detect_deepfake": "true" if detect_deepfake else "false"}
         return await self._request("POST", "/v1/speakers/verify", paid=True, data=data,
                                    files=self._file(file_bytes, filename, content_type))
 
-    async def detect(self, file_bytes: bytes, filename: Optional[str], content_type: Optional[str],
-                     scenario: Optional[str] = None) -> dict:
+    async def detect(self, file_bytes: bytes, filename: Optional[str], content_type: Optional[str]) -> dict:
         return await self._request("POST", "/v1/deepfake/detect", paid=True,
                                    files=self._file(file_bytes, filename, content_type))
 
 
 # ---------------------------------------------------------------------------
-# Response normalisation (shared by live + mock, since mock returns the same shapes)
+# Response normalisation
 # ---------------------------------------------------------------------------
 
 def _num(v: Any) -> Optional[float]:
@@ -309,151 +317,3 @@ def normalize_verify_error(err: DetectifError) -> Optional[dict]:
         "duration_seconds": _num(df_obj.get("duration_seconds")),
     }
 
-
-# ---------------------------------------------------------------------------
-# Mock client
-# ---------------------------------------------------------------------------
-
-MOCK_SCENARIOS = ("genuine", "deepfake", "imposter", "uncertain")
-
-
-class MockClient:
-    """Same interface as LiveClient. Shapes mirror DetectifAI; ids are prefixed `mock_`; credits are null."""
-
-    mode = "mock"
-
-    def __init__(self, latency: tuple[float, float] = (0.3, 0.7), seed: Optional[int] = None):
-        self._latency = latency
-        self._rng = random.Random(seed)
-        self._speakers: dict[str, dict] = {}
-
-    async def aclose(self) -> None:
-        return None
-
-    async def _delay(self) -> int:
-        lo, hi = self._latency
-        secs = self._rng.uniform(lo, hi) if hi > 0 else 0.0
-        if secs:
-            await asyncio.sleep(secs)
-        return int(secs * 1000)
-
-    def _id(self, prefix: str) -> str:
-        return f"mock_{prefix}_{uuid.uuid4().hex[:24]}"
-
-    @staticmethod
-    def _now() -> str:
-        return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-    def _segments(self, duration: float, center: float) -> list:
-        segs, start = [], 0.0
-        while True:
-            end = min(duration, start + 4.0)
-            score = max(0.0, min(1.0, center + self._rng.uniform(-0.04, 0.04)))
-            segs.append({"start": round(start, 2), "end": round(end, 2), "score": round(score, 4)})
-            if end >= duration:
-                break
-            start += 2.0
-        return segs
-
-    def _deepfake(self, scenario: str, duration: float) -> dict:
-        r = self._rng
-        if scenario == "deepfake":
-            verdict, score, decided_by = "fake", r.uniform(0.80, 0.95), "second_stage"
-        elif scenario == "uncertain":
-            verdict, score, decided_by = "not_sure", r.uniform(0.63, 0.67), "language_threshold"
-        elif scenario == "imposter":
-            verdict, score, decided_by = "real", r.uniform(0.07, 0.13), "main_model"
-        else:
-            verdict, score, decided_by = "real", r.uniform(0.05, 0.15), "main_model"
-        label = {"real": "genuine", "fake": "synthetic", "not_sure": "uncertain"}[verdict]
-        return {
-            "verdict": verdict, "label": label, "is_synthetic": verdict == "fake", "decided_by": decided_by,
-            "score": round(score, 4), "threshold": 0.62,
-            "score_semantics": "Higher means more likely AI-generated. Decide with the verdict, not the score alone.",
-            "duration_seconds": round(duration, 2), "segments": self._segments(duration, score),
-        }
-
-    def _similarity(self, scenario: str) -> tuple[str, float]:
-        r = self._rng
-        if scenario == "deepfake":
-            sim = r.uniform(0.55, 0.65)  # clones often still match!
-        elif scenario == "imposter":
-            sim = r.uniform(0.10, 0.30)
-        elif scenario == "uncertain":
-            sim = r.uniform(0.57, 0.59)
-        else:
-            sim = r.uniform(0.70, 0.80)
-        return ("match" if sim >= 0.53 else "no_match"), round(sim, 4)
-
-    @staticmethod
-    def _scenario(s: Optional[str]) -> str:
-        return s if s in MOCK_SCENARIOS else "genuine"
-
-    @staticmethod
-    def _duration(file_bytes: bytes, default: float) -> float:
-        d = wav_duration(file_bytes)
-        return d if d else default
-
-    async def health(self) -> dict:
-        return {"request_id": self._id("req"), "status": "ok", "inference": "ok", "mock": True}
-
-    async def credits(self) -> dict:
-        return {"request_id": self._id("req"), "object": "credits", "plan": "mock", "unlimited": True,
-                "available": None, "reserved": 0, "price_per_operation": 0, "mock": True}
-
-    async def list_speakers(self) -> dict:
-        return {"data": [dict(s) for s in self._speakers.values()]}
-
-    async def feedback(self, operation_id: str, correct: bool) -> dict:
-        return {"request_id": self._id("req"), "object": "operation.feedback", "operation_id": operation_id,
-                "correct": bool(correct), "created_at": self._now(), "mock": True}
-
-    async def enroll(self, file_bytes: bytes, filename: Optional[str], content_type: Optional[str],
-                     speaker_id: str, display_name: Optional[str] = None) -> dict:
-        latency = await self._delay()
-        duration = self._duration(file_bytes, 20.0)
-        now = self._now()
-        sp = self._speakers.get(speaker_id) or {"speaker_id": speaker_id, "samples": 0, "created_at": now}
-        sp["display_name"] = display_name or sp.get("display_name")
-        sp["samples"] = min(5, sp["samples"] + 1)
-        sp["updated_at"] = now
-        self._speakers[speaker_id] = sp
-        return {
-            "request_id": self._id("req"), "operation_id": self._id("op"), "object": "speaker.enrollment",
-            "speaker": dict(sp),
-            "quality": {"speech_seconds": round(duration * 0.9, 2), "duration_seconds": round(duration, 2)},
-            "model": {"name": "mock", "version": "mock"}, "credits": None, "latency_ms": latency,
-            "idempotent_replay": False, "mock": True,
-        }
-
-    async def verify(self, file_bytes: bytes, filename: Optional[str], content_type: Optional[str],
-                     speaker_id: str, detect_deepfake: bool = True, scenario: Optional[str] = None) -> dict:
-        scenario = self._scenario(scenario)
-        latency = await self._delay()
-        duration = self._duration(file_bytes, 8.0)
-        decision, sim = self._similarity(scenario)
-        deepfake = None
-        if detect_deepfake:
-            deepfake = self._deepfake(scenario, duration)
-            deepfake.update({"operation_id": self._id("op"), "credits_charged": 0,
-                             "model": {"name": "mock", "version": "mock"}})
-        return {
-            "request_id": self._id("req"), "operation_id": self._id("op"), "object": "speaker.verification",
-            "speaker_id": speaker_id,
-            "result": {"decision": decision, "similarity": sim, "threshold": 0.53,
-                       "similarity_semantics": "Higher means the two voices are more alike. Not a percentage.",
-                       "duration_seconds": round(duration, 2)},
-            "deepfake": deepfake, "model": {"name": "mock", "version": "mock"}, "credits": None,
-            "latency_ms": latency, "idempotent_replay": False, "mock": True,
-        }
-
-    async def detect(self, file_bytes: bytes, filename: Optional[str], content_type: Optional[str],
-                     scenario: Optional[str] = None) -> dict:
-        scenario = self._scenario(scenario)
-        latency = await self._delay()
-        duration = self._duration(file_bytes, 8.0)
-        return {
-            "request_id": self._id("req"), "operation_id": self._id("op"), "object": "deepfake.detection",
-            "model": {"name": "mock", "version": "mock"}, "latency_ms": latency, "idempotent_replay": False,
-            "result": self._deepfake(scenario, duration), "credits": None, "mock": True,
-        }

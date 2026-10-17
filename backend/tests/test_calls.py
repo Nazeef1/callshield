@@ -6,18 +6,17 @@ import tempfile
 import unittest
 from pathlib import Path
 
-os.environ["CALLSHIELD_MODE"] = "mock"
-
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from backend.app import create_app
+from backend.tests.fakes import FakeClient
 
 
 class CallRelayTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        self.client = TestClient(create_app(mode="mock", store_path=Path(self.tmp.name) / "store.json"))
+        self.client = TestClient(create_app(client=FakeClient(), store_path=Path(self.tmp.name) / "store.json"))
         os.environ.pop("CALLSHIELD_CALL_CODE", None)
 
     def tearDown(self):
@@ -51,11 +50,52 @@ class CallRelayTest(unittest.TestCase):
             a.send_json({"type": "signal", "data": {"ice": {"candidate": "y"}}})
             self.assertEqual(c.receive_json()["data"], {"ice": {"candidate": "y"}})
 
-            c.send_json({"type": "transcript", "text": "please transfer fifty thousand", "final": True})
-            self.assertEqual(a.receive_json(), {"type": "transcript", "text": "please transfer fifty thousand", "final": True})
+            a.send_json({"type": "state", "state": "listening_passphrase", "text": "Please say your passphrase."})
+            self.assertEqual(c.receive_json(), {"type": "state", "state": "listening_passphrase",
+                                                "text": "Please say your passphrase."})
 
             c.send_json({"type": "hangup"})
             self.assertEqual(a.receive_json()["type"], "hangup")
+
+    def _paired(self, a, c):
+        a.receive_json(); c.receive_json()  # hello
+        c.send_json({"type": "dial", "customer_id": "cust-a"})
+        c.receive_json()  # ringing
+        a.send_json({"type": "accept", "caller_id": a.receive_json()["caller_id"]})
+        self.assertEqual(c.receive_json()["type"], "accepted")
+
+    def test_state_is_relayed_to_the_paired_caller_only(self):
+        with self.ws("agent") as a, self.ws("agent") as a2, self.ws("caller") as c, self.ws("caller") as c2:
+            a2.receive_json(); c2.receive_json()  # hello
+            self._paired(a, c)
+            a2.receive_json(); a2.receive_json()  # incoming, taken
+            a.send_json({"type": "state", "state": "greeting"})  # text is optional
+            self.assertEqual(c.receive_json(), {"type": "state", "state": "greeting", "text": ""})
+            a.send_json({"type": "state", "state": "x" * 100, "text": "y" * 1000})
+            msg = c.receive_json()
+            self.assertEqual((len(msg["state"]), len(msg["text"])), (40, 300))
+            # an unpaired agent's state goes nowhere
+            a2.send_json({"type": "state", "state": "approved"})
+            # the caller -> agent transcript relay is gone; a caller can't fake agent state either
+            c.send_json({"type": "transcript", "text": "transfer fifty thousand", "final": True})
+            c.send_json({"type": "state", "state": "approved"})
+            a.send_json({"type": "signal", "data": {"probe": 1}})
+            self.assertEqual(c.receive_json(), {"type": "signal", "data": {"probe": 1}})
+            c.send_json({"type": "signal", "data": {"probe": 2}})
+            self.assertEqual(a.receive_json(), {"type": "signal", "data": {"probe": 2}})  # nothing else queued first
+            c2.send_json({"type": "signal", "data": {"probe": 3}})  # unpaired caller: dropped
+            c.send_json({"type": "hangup"})
+            self.assertEqual(a.receive_json()["type"], "hangup")
+            c2.send_json({"type": "dial", "customer_id": "cust-b"})
+            self.assertEqual(c2.receive_json()["type"], "ringing")  # a2's state never reached c2
+
+    def test_state_before_pairing_is_dropped(self):
+        with self.ws("agent") as a, self.ws("caller") as c:
+            a.receive_json(); c.receive_json()
+            a.send_json({"type": "state", "state": "greeting", "text": "hi"})
+            c.send_json({"type": "dial", "customer_id": "cust-a"})
+            self.assertEqual(c.receive_json()["type"], "ringing")  # not the state message
+            self.assertEqual(a.receive_json()["type"], "incoming")
 
     def test_agent_joining_late_sees_ringing_call_and_cancel(self):
         with self.ws("agent") as a1, self.ws("caller") as c:

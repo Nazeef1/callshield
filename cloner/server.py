@@ -7,8 +7,6 @@ Contract:
   GET  /health
   POST /warmup
   POST /clone  (multipart: reference, text, engine, language) -> audio/wav
-  POST /transcribe  (multipart: file = 16 kHz mono WAV, language) -> {text, ms, model}
-       Local Whisper speech-to-text for the agent console's live call transcript.
 """
 from __future__ import annotations
 
@@ -22,7 +20,6 @@ from fastapi.responses import JSONResponse, Response
 from . import eleven_engine
 from .audio import convert_to_wav, probe_duration_seconds, wav_stats
 from .config import MAX_TEXT_CHARS, MIN_REFERENCE_SECONDS
-from .asr import MODEL_NAME as ASR_MODEL, transcriber
 from .local_engine import MODEL_NAME as LOCAL_MODEL, local_engine
 
 app = FastAPI(title="CallShield Attack Lab Cloner", version="1.0")
@@ -68,7 +65,6 @@ def health():
             },
             "elevenlabs": {"available": eleven_engine.available()},
         },
-        "asr": {"available": transcriber.available, "model": ASR_MODEL, "loaded": transcriber.loaded},
     }
 
 
@@ -155,21 +151,6 @@ async def clone(
             os.rmdir(tmpdir)
         except OSError:
             pass
-
-
-@app.post("/transcribe")
-def transcribe(file: UploadFile = File(...), language: str = Form("en")):
-    if not transcriber.available:
-        return _err("asr_unavailable", "Speech-to-text needs torch + transformers in this venv.", 503)
-    data = file.file.read()
-    if not data:
-        return _err("empty_file", "The audio file is empty.", 400)
-    t0 = time.time()
-    try:
-        text = transcriber.transcribe_wav(data, (language or "en")[:5])
-    except Exception as e:
-        return _err("transcribe_failed", f"Transcription failed: {e}", 500)
-    return {"text": text, "ms": int((time.time() - t0) * 1000), "model": ASR_MODEL}
 
 
 # Expose wav_stats for optional debugging via import; not a route.
