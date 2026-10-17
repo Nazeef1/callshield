@@ -89,7 +89,7 @@ class Upstream:
         self._credits_at = 0.0
         self._health: Optional[str] = None
         self._health_at = 0.0
-        self._speakers_at = 0.0
+        self._speakers_at: Optional[float] = None  # never synced
 
     async def get_credits(self, force: bool = False) -> dict:
         if not force and self._credits is not None and time.monotonic() - self._credits_at < CREDITS_TTL:
@@ -138,7 +138,8 @@ class Upstream:
         return self._health
 
     def speakers_stale(self) -> bool:
-        return time.monotonic() - self._speakers_at >= SPEAKERS_TTL
+        # monotonic() counts from boot on Linux, so a 0.0 sentinel looked fresh on a just-booted machine
+        return self._speakers_at is None or time.monotonic() - self._speakers_at >= SPEAKERS_TTL
 
     def mark_speakers_synced(self) -> None:
         self._speakers_at = time.monotonic()
