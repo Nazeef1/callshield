@@ -10,7 +10,7 @@ victim and both clips ready; phone on the CallShield Bank home screen, enrolled;
 
 ## Title slide (≈5 s)
 
-*Title slide on screen as the judges sit down.*
+*Title slide on screen as you start.*
 
 Hi, we're CallShield. We stop cloned voices from moving money over a bank's helpline, and DetectifAI makes every
 decision.
@@ -53,7 +53,7 @@ No forms, no OTP. The customer just talks. Let me show you.
 
 ### Scene 1: the real customer (≈60 s)
 
-*Switch to the laptop Receive screen. Pick up the phone, hold it so the judges can see it.*
+*Switch to the laptop Receive screen. Pick up the phone, hold it so everyone can see it.*
 
 This is the bank's screen. Neerja is online. And this is me, the customer, on the CallShield Bank app.
 
@@ -138,7 +138,7 @@ one step in the bank's existing phone menu.
 The risks have answers: phone audio is measured and fixed; a replayed recording still needs a live passphrase and
 triggers an alert; and enrollment is opt-in, with deletion on request under the DPDP Act.
 
-*Close, looking at the judges.*
+*Close, looking at the audience.*
 
 A fraudster can copy your voice. CallShield makes sure it can't move your money. Thank you.
 
@@ -153,8 +153,3 @@ A fraudster can copy your voice. CallShield makes sure it can't move your money.
 | Neerja asks for the passphrase again | Say it again, clearly. "She needs about three seconds of voice." |
 | Wi-Fi / DetectifAI is slow | "This is a live call to DetectifAI over a phone hotspot." Wait; the verdict usually lands within ten seconds. |
 | Demo fails completely | Open the Recent calls table on the Receive screen: "Here are today's live results: the same calls, approved and blocked." |
-
-## Quick answers for Q&A
-
-See `DEMO.md` → *Likely judge questions* (false positives, why a passphrase, phone audio, silent caller, replay,
-contact-centre integration, cost, privacy).

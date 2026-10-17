@@ -5,7 +5,7 @@ Cloning is done by a separate local service (default http://127.0.0.1:8100, env 
   POST /clone   multipart reference, text, engine, language -> audio/wav (+ X-Engine, X-Model, X-Gen-Ms)
   POST /warmup
 
-SECURITY: the Attack Lab only works for requests made on the presenter's laptop. The app is exposed to judges
+SECURITY: the Attack Lab only works for requests made on the presenter's laptop. The app can be exposed to visitors
 through a cloudflared tunnel, which connects from localhost, so "client host is 127.0.0.1" alone is not enough:
 a request is local only if
   * env CALLSHIELD_ATTACK_LAB != "0", and
@@ -55,7 +55,7 @@ def lab_env_enabled() -> bool:
 
 
 def lab_public() -> bool:
-    """CALLSHIELD_ATTACK_LAB=public: judges may use the lab from the deployed site (mic-recorded reference only,
+    """CALLSHIELD_ATTACK_LAB=public: visitors may use the lab from the deployed site (mic-recorded reference only,
     consent required, rate-limited, clones never stored). Cloning still runs on the presenter's GPU laptop."""
     return (os.getenv("CALLSHIELD_ATTACK_LAB") or "").strip().lower() == "public"
 
