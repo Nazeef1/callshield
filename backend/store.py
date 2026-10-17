@@ -76,14 +76,18 @@ class Store:
             items = [copy.deepcopy(c) for c in self._data["customers"].values()]
         return sorted(items, key=lambda c: c.get("enrolled_at") or "", reverse=True)
 
+    def delete_customer(self, customer_id: str) -> bool:
+        with self._lock:
+            found = self._data["customers"].pop(customer_id, None) is not None
+            if found:
+                self._save()
+            return found
+
     def upsert_customer(self, customer: dict) -> dict:
         with self._lock:
             cid = customer["customer_id"]
             existing = self._data["customers"].get(cid, {})
             merged = {**existing, **{k: v for k, v in customer.items() if v is not None or k not in existing}}
-            # A customer enrolled live stays live even if later re-enrolled in mock mode.
-            if existing.get("mode") == "live":
-                merged["mode"] = "live"
             self._data["customers"][cid] = merged
             self._save()
             return copy.deepcopy(merged)

@@ -1,0 +1,32 @@
+{
+  "voice": "en-IN-NeerjaNeural",
+  "passphrase": "My voice is my password, and I am calling CallShield Bank to approve my own request.",
+  "prompts": {
+    "greeting": "Welcome to CallShield Bank. I'm Neerja, your virtual assistant. How can I help you today?",
+    "didnt_catch": "Sorry, I didn't catch that. I can help you transfer money, reset your SIM or OTP, change your transaction limit, or add a beneficiary. What would you like to do?",
+    "ack_fund_transfer": "Sure, I can help you with that fund transfer.",
+    "ack_sim_otp_reset": "Sure, I can help you reset your SIM and OTP.",
+    "ack_limit_change": "Sure, I can help you change your transaction limit.",
+    "ack_beneficiary_add": "Sure, I can help you add a new beneficiary.",
+    "passphrase": "Before I do that, I need to verify your voice. Please say your voice passphrase now.",
+    "passphrase_retry": "Thank you. Please say your passphrase one more time.",
+    "verifying": "Thank you. Please hold for a moment while I verify your voice.",
+    "approve": "Your voice has been verified, and your request has been approved. Thank you for banking with us. Goodbye!",
+    "step_up": "I need to do an additional security check. I'm connecting you to a customer care officer now. Please stay on the line.",
+    "block": "I'm sorry, we could not verify that this is your voice, so this request has been blocked for your safety. If you didn't make this request, your account is safe. Goodbye.",
+    "handoff": "Let me connect you to a customer care officer. Please stay on the line.",
+    "error": "Sorry, I'm having trouble verifying your voice right now. Let me connect you to a customer care officer.",
+    "enroll_welcome": "Welcome to CallShield Bank voice enrollment. I'll record your voice so we can recognise you on future calls. Please read the text on your screen aloud, at your normal pace, until I say thank you.",
+    "enroll_keep_reading": "Please keep reading the text on your screen.",
+    "enroll_hold": "Thank you. Please hold while I save your voice.",
+    "enroll_done": "Your voice is now enrolled. Next time you call, just tell me what you need and say your passphrase. Goodbye!",
+    "enroll_failed": "Sorry, I couldn't save your voice this time. Please call again to try once more. Goodbye."
+  },
+  "enroll_script": [
+    "My voice is my password, and I am calling CallShield Bank to approve my own request.",
+    "I bank with CallShield Bank, and today I am setting up my voice so the bank can recognise me when I call.",
+    "When I ask for a transfer, a new SIM, a higher limit or a new beneficiary, my voice confirms that it is really me.",
+    "The quick brown fox jumps over the lazy dog, and twelve green bottles stand on the wall.",
+    "My voice is my password, and I am calling CallShield Bank to approve my own request."
+  ]
+}

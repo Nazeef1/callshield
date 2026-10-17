@@ -86,14 +86,11 @@ class Resampler {
 /**
  * Microphone capture with a rolling ring buffer (default 30 s) at 16 kHz mono.
  *   await mic.start(); mic.getLast(8) -> Float32Array; mic.bufferedSeconds; mic.level (0..1 RMS)
- *   mic.getPeaks() -> Float32Array of per-20 ms peaks over the last 10 s (oldest first) for waveforms
  *   mic.startRecording(); ... mic.stopRecording() -> Float32Array of the full take
  */
 export class MicCapture {
-  constructor({ ringSeconds = 30, peakMs = 20, peakSeconds = 10 } = {}) {
+  constructor({ ringSeconds = 30 } = {}) {
     this.ring = new Float32Array(Math.round(ringSeconds * SAMPLE_RATE));
-    this.peakSize = Math.round((SAMPLE_RATE * peakMs) / 1000);
-    this.peaks = new Float32Array(Math.round((peakSeconds * 1000) / peakMs));
     this.listeners = new Set();
     this.running = false;
     this.mode = null;
@@ -107,10 +104,6 @@ export class MicCapture {
   reset() {
     this.write = 0;
     this.total = 0;
-    this.peaks.fill(0);
-    this.peakWrite = 0;
-    this.peakAcc = 0;
-    this.peakCount = 0;
     this.level = 0;
   }
 
@@ -226,19 +219,7 @@ export class MicCapture {
     this.total += n;
 
     let sum = 0;
-    const P = this.peaks;
-    for (let i = 0; i < n; i++) {
-      const v = x[i];
-      sum += v * v;
-      const a = v < 0 ? -v : v;
-      if (a > this.peakAcc) this.peakAcc = a;
-      if (++this.peakCount >= this.peakSize) {
-        P[this.peakWrite] = this.peakAcc;
-        this.peakWrite = (this.peakWrite + 1) % P.length;
-        this.peakAcc = 0;
-        this.peakCount = 0;
-      }
-    }
+    for (let i = 0; i < n; i++) sum += x[i] * x[i];
     const rms = Math.sqrt(sum / n);
     this.level = Math.max(rms, this.level * 0.85); // fast attack, slow release
 
@@ -273,11 +254,19 @@ export class MicCapture {
     return out;
   }
 
-  /** Peaks over the last ~10 s, oldest first. */
-  getPeaks() {
-    const P = this.peaks, out = new Float32Array(P.length);
-    out.set(P.subarray(this.peakWrite));
-    out.set(P.subarray(0, this.peakWrite), P.length - this.peakWrite);
+  /** Audio between two `total` sample counters (e.g. marked when the caller started and stopped a reply).
+   *  Clipped to what is still in the ring buffer. */
+  getRange(from, to) {
+    const RL = this.ring.length;
+    to = Math.min(to, this.total);
+    from = Math.max(from, this.total - Math.min(this.total, RL));
+    const n = Math.max(0, to - from);
+    const out = new Float32Array(n);
+    if (!n) return out;
+    const start = (((this.write - (this.total - from)) % RL) + RL) % RL;
+    const first = Math.min(n, RL - start);
+    out.set(this.ring.subarray(start, start + first));
+    if (first < n) out.set(this.ring.subarray(0, n - first), first);
     return out;
   }
 
@@ -298,6 +287,30 @@ export class MicCapture {
     for (const p of parts) { out.set(p, o); o += p.length; }
     return out;
   }
+}
+
+/**
+ * Remove the runs of exact digital zeros (>= `minRun` s) that a WebRTC call inserts while the caller is quiet.
+ * They aren't natural silence: in call clips they were 60-70% of the audio, dragged a genuine caller's speaker
+ * match from 0.85 down to 0.21 and made the deepfake check spike. Natural pauses (room noise) are kept, and
+ * since the cuts sit on zeros the joins are seamless.
+ */
+export function dropDigitalSilence(samples, sampleRate = SAMPLE_RATE, minRun = 0.06) {
+  // "Zero" = what encodeWav writes as 0 (setInt16 truncates: |x| < 1/32767). The call's silence reaches us as
+  // tiny floats, not exact 0. Natural room noise in call audio is >= ~3e-3, two orders of magnitude above.
+  const Z = 1 / 32767;
+  const m = Math.round(minRun * sampleRate);
+  const out = new Float32Array(samples.length);
+  let o = 0;
+  let i = 0;
+  while (i < samples.length) {
+    if (Math.abs(samples[i]) >= Z) { out[o++] = samples[i++]; continue; }
+    let j = i;
+    while (j < samples.length && Math.abs(samples[j]) < Z) j++;
+    if (j - i < m) { while (i < j) out[o++] = samples[i++]; }  // short zero stretch: part of the waveform
+    i = j;
+  }
+  return out.slice(0, o);
 }
 
 /** Encode mono Float32 samples as a 16-bit PCM WAV Blob. */
@@ -347,60 +360,4 @@ export function estimateSpeechSeconds(samples, sampleRate = SAMPLE_RATE) {
   let voiced = 0;
   for (let f = 0; f < frames; f++) if (rms[f] > thr) voiced++;
   return (voiced * frame) / sampleRate;
-}
-
-/** Duration (s) of an audio File/Blob, or null if the browser cannot decode it. */
-export async function audioFileDuration(file) {
-  const AC = window.AudioContext || window.webkitAudioContext;
-  if (!AC) return null;
-  let ctx = null;
-  try {
-    const data = await file.arrayBuffer();
-    ctx = new AC();
-    const buf = await ctx.decodeAudioData(data);
-    return buf.duration;
-  } catch {
-    return null;
-  } finally {
-    try { if (ctx) ctx.close(); } catch { /* ignore */ }
-  }
-}
-
-/**
- * Draw a bar waveform of peaks (oldest -> newest, left -> right) into a canvas.
- * opts.highlightFrac: fraction (0..1) of the right-hand side to draw in the accent colour
- * (the "check window" that will be sent).
- */
-export function drawPeaks(canvas, peaks, { highlightFrac = 0, color = '#5b6475', accent = '#d4ff2a', bg = null, gain = 1.4 } = {}) {
-  const dpr = window.devicePixelRatio || 1;
-  const w = Math.max(1, Math.round(canvas.clientWidth * dpr));
-  const h = Math.max(1, Math.round(canvas.clientHeight * dpr));
-  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
-  const g = canvas.getContext('2d');
-  g.clearRect(0, 0, w, h);
-  if (bg) { g.fillStyle = bg; g.fillRect(0, 0, w, h); }
-  const barW = 3 * dpr, gap = 1 * dpr, step = barW + gap;
-  const bars = Math.max(1, Math.floor(w / step));
-  const per = peaks.length / bars;
-  const mid = h / 2;
-  const hiStart = w * (1 - highlightFrac);
-  if (highlightFrac > 0) {
-    g.fillStyle = 'rgba(212, 255, 42, 0.06)';
-    g.fillRect(hiStart, 0, w - hiStart, h);
-    g.fillStyle = 'rgba(212, 255, 42, 0.5)';
-    g.fillRect(hiStart, 0, 1 * dpr, h);
-  }
-  // centre line
-  g.fillStyle = 'rgba(255,255,255,0.06)';
-  g.fillRect(0, mid - 0.5 * dpr, w, 1 * dpr);
-  for (let b = 0; b < bars; b++) {
-    const a = Math.floor(b * per), z = Math.max(a + 1, Math.floor((b + 1) * per));
-    let p = 0;
-    for (let i = a; i < z && i < peaks.length; i++) if (peaks[i] > p) p = peaks[i];
-    const amp = Math.min(1, Math.sqrt(p) * gain);
-    const bh = Math.max(1 * dpr, amp * (h - 8 * dpr));
-    const x = w - (bars - b) * step;
-    g.fillStyle = x >= hiStart && highlightFrac > 0 ? accent : color;
-    g.fillRect(x, mid - bh / 2, barW, bh);
-  }
 }

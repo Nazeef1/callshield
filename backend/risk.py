@@ -1,4 +1,4 @@
-"""CallShield risk engine: deterministic, explainable, pure functions (see CONTRACT.md).
+"""CallShield risk engine: deterministic, explainable, pure functions.
 
 score = 0
 deepfake.verdict: fake -> +70 ; not_sure -> +30 ; real -> + round(score*20)

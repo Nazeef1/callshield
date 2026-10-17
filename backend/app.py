@@ -1,8 +1,7 @@
-"""CallShield backend (FastAPI). See CONTRACT.md section "CallShield backend API".
+"""CallShield backend (FastAPI). API overview: README.md, section 6.
 
-Run from the project root:
+Run from the project root (DETECTIF_API_KEY in the environment or .env):
     .venv/Scripts/python -m uvicorn backend.app:app --port 8000
-Mode = mock if CALLSHIELD_MODE=mock or no DETECTIF_API_KEY, else live.
 """
 from __future__ import annotations
 
@@ -27,8 +26,8 @@ from starlette.staticfiles import StaticFiles
 from . import attack, calls, risk
 from .public_limit import PublicLimiter
 from .audio import wav_duration
-from .detectif import (MOCK_SCENARIOS, PRICE_PER_OPERATION, DetectifError, LiveClient, MockClient,
-                       normalize_detect, normalize_verify, normalize_verify_error)
+from .detectif import (PRICE_PER_OPERATION, DetectifError, LiveClient, normalize_detect, normalize_verify,
+                       normalize_verify_error)
 from .events import PING_INTERVAL, Broadcaster
 from .store import Store, valid_customer_id
 
@@ -42,21 +41,13 @@ CREDITS_TTL = 30.0
 HEALTH_TTL = 30.0
 SPEAKERS_TTL = 60.0
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
-MAX_TRANSCRIBE_BYTES = 1024 * 1024
-MIN_VERIFY_SECONDS = 3.5     # DetectifAI verify needs 3-60 s
+MIN_VERIFY_SECONDS = 3.0     # DetectifAI verify needs 3-60 s (with >= 2 s of speech)
 MIN_DEEPFAKE_SECONDS = 4.0   # deepfake check needs MORE than 4 s
 MAX_VERIFY_SECONDS = 60.0
 MAX_DETECT_SECONDS = 120.0
 ENROLL_MIN_SECONDS = 15.0
 ENROLL_MAX_SECONDS = 60.0
-TRIGGERS = ("manual", "keyword", "upload")
-
-
-def detect_mode() -> str:
-    key = (os.getenv("DETECTIF_API_KEY") or "").strip()
-    if (os.getenv("CALLSHIELD_MODE") or "").strip().lower() == "mock" or not key:
-        return "mock"
-    return "live"
+TRIGGERS = ("voicebot", "manual")
 
 
 def now_iso() -> str:
@@ -89,12 +80,11 @@ def upstream_to_api_error(e: DetectifError) -> ApiError:
 
 
 class Upstream:
-    """Mode, client and the cached free calls (credits / health / speakers)."""
+    """DetectifAI client and the cached free calls (credits / health / speakers)."""
 
-    def __init__(self, mode: str, client):
-        self.mode = mode
+    def __init__(self, client):
         self.client = client
-        self.lock = asyncio.Lock()  # serialises paid live calls so the credit guard can't be raced
+        self.lock = asyncio.Lock()  # serialises paid calls so the credit guard can't be raced
         self._credits: Optional[dict] = None
         self._credits_at = 0.0
         self._health: Optional[str] = None
@@ -133,8 +123,7 @@ class Upstream:
         available = c.get("available") or 0
         if available < needed:
             raise ApiError(402, "insufficient_credits",
-                           f"Only {available} DetectifAI credits left; this needs {needed}. "
-                           "Run in mock mode (CALLSHIELD_MODE=mock) to keep demoing.",
+                           f"Only {available} DetectifAI credits left; this needs {needed}.",
                            available=available, required=needed)
 
     async def get_health(self) -> str:
@@ -188,7 +177,6 @@ def _public_customer(c: dict) -> dict:
         "phone_last4": c.get("phone_last4"),
         "enrolled_at": c.get("enrolled_at"),
         "samples": c.get("samples"),
-        "mode": c.get("mode"),
     }
 
 
@@ -214,22 +202,21 @@ async def _read_upload(file: UploadFile) -> bytes:
     return data
 
 
-def create_app(mode: Optional[str] = None, client=None, store_path=None, frontend_dir=None,
-               ping_interval: float = PING_INTERVAL, cloner=None) -> FastAPI:
-    mode = mode or detect_mode()
+def create_app(client=None, store_path=None, frontend_dir=None, ping_interval: float = PING_INTERVAL,
+               cloner=None) -> FastAPI:
+    """`client` defaults to a LiveClient on DETECTIF_API_KEY (tests inject a fake)."""
     owns_client = client is None
     owns_cloner = cloner is None
+    if client is None:
+        key = (os.getenv("DETECTIF_API_KEY") or "").strip()
+        if not key:
+            raise RuntimeError("DETECTIF_API_KEY is not set: put it in .env or the environment.")
+        client = LiveClient(key, base_url=os.getenv("DETECTIF_BASE_URL") or None)
     if cloner is None:
         cloner = attack.ClonerClient()  # Attack Lab (laptop-only) -> local voice-cloning service
-    if client is None:
-        if mode == "live":
-            client = LiveClient(os.environ["DETECTIF_API_KEY"].strip(),
-                                base_url=os.getenv("DETECTIF_BASE_URL") or None)
-        else:
-            client = MockClient()
     data_dir = Path(os.getenv("CALLSHIELD_DATA_DIR") or (ROOT / "data"))
     store = Store(store_path or (data_dir / "store.json"))
-    upstream = Upstream(mode, client)
+    upstream = Upstream(client)
     broadcaster = Broadcaster(ping_interval=ping_interval)
 
     @asynccontextmanager
@@ -241,7 +228,6 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
             await cloner.aclose()
 
     app = FastAPI(title="CallShield", version="1.0", lifespan=lifespan)
-    app.state.mode = mode
     app.state.store = store
     app.state.upstream = upstream
     app.state.broadcaster = broadcaster
@@ -252,7 +238,7 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
     async def _api_error(_req, exc: ApiError):
         body = {"code": exc.code, "message": exc.message}
         body.update({k: v for k, v in exc.extra.items() if v is not None})
-        return JSONResponse({"error": body, "mode": mode}, status_code=exc.status)
+        return JSONResponse({"error": body}, status_code=exc.status)
 
     @app.exception_handler(RequestValidationError)
     async def _validation_error(_req, exc: RequestValidationError):
@@ -260,23 +246,32 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
         for err in exc.errors():
             loc = ".".join(str(x) for x in err.get("loc", ()) if x not in ("body", "query", "path"))
             parts.append(f"{loc}: {err.get('msg')}" if loc else str(err.get("msg")))
-        return JSONResponse({"error": {"code": "invalid_request", "message": "; ".join(parts) or "Invalid request"},
-                             "mode": mode}, status_code=400)
+        return JSONResponse({"error": {"code": "invalid_request", "message": "; ".join(parts) or "Invalid request"}},
+                            status_code=400)
 
     @app.exception_handler(Exception)
     async def _unhandled(_req, exc: Exception):
-        return JSONResponse({"error": {"code": "internal_error", "message": f"Internal error ({type(exc).__name__})"},
-                             "mode": mode}, status_code=500)
+        return JSONResponse({"error": {"code": "internal_error", "message": f"Internal error ({type(exc).__name__})"}},
+                            status_code=500)
 
     # ---- helpers --------------------------------------------------------
     public_limiter = PublicLimiter()
+    debug_dir = data_dir / "debug" if (os.getenv("CALLSHIELD_DEBUG_AUDIO") or "").strip() == "1" else None
 
-    def is_enrolled(customer: Optional[dict]) -> bool:
-        return customer is not None and (mode == "mock" or customer.get("mode") == "live")
+    def debug_dump(kind: str, who: str, data: bytes) -> None:
+        """CALLSHIELD_DEBUG_AUDIO=1: keep a copy of enrollment / check audio in data/debug (local diagnosis only)."""
+        if debug_dir is None:
+            return
+        try:
+            debug_dir.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now().strftime("%H%M%S")
+            (debug_dir / f"{stamp}_{kind}_{who}.wav").write_bytes(data)
+        except OSError:
+            pass
 
-    async def sync_live_speakers() -> None:
-        """Live mode: pull enrolled speakers from DetectifAI (free) so a wiped store self-heals."""
-        if mode != "live" or not upstream.speakers_stale():
+    async def sync_speakers() -> None:
+        """Pull enrolled speakers from DetectifAI (free) so a wiped store self-heals."""
+        if not upstream.speakers_stale():
             return
         upstream.mark_speakers_synced()
         try:
@@ -288,7 +283,7 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
             if not sid or not valid_customer_id(sid):
                 continue
             existing = store.get_customer(sid)
-            if existing and existing.get("mode") == "live" and existing.get("samples") == sp.get("samples"):
+            if existing and existing.get("samples") == sp.get("samples"):
                 continue
             store.upsert_customer({
                 "customer_id": sid,
@@ -296,30 +291,34 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
                 "phone_last4": (existing or {}).get("phone_last4"),
                 "enrolled_at": (existing or {}).get("enrolled_at") or sp.get("created_at") or now_iso(),
                 "samples": sp.get("samples"),
-                "mode": "live",
             })
 
     # ---- routes ---------------------------------------------------------
     @app.get("/api/status")
     async def status():
-        credits = None
-        health = "unknown"
-        if mode == "live":
-            try:
-                c = await upstream.get_credits()
-                credits = {"available": c.get("available"), "price_per_operation": c.get("price_per_operation")}
-                if c.get("unlimited"):
-                    credits["unlimited"] = True
-            except DetectifError:
-                credits = None
-            health = await upstream.get_health()
-        return {"mode": mode, "credits": credits, "health": health, "cost_per_check": COST_PER_CHECK}
+        try:
+            credits = dict(await upstream.get_credits())
+        except DetectifError:
+            credits = None
+        return {"credits": credits, "health": await upstream.get_health(), "cost_per_check": COST_PER_CHECK}
 
     @app.get("/api/customers")
     async def customers():
-        await sync_live_speakers()
-        items = [c for c in store.list_customers() if is_enrolled(c)]
-        return {"customers": [_public_customer(c) for c in items]}
+        await sync_speakers()
+        return {"customers": [_public_customer(c) for c in store.list_customers()]}
+
+    @app.delete("/api/customers/{customer_id}")
+    async def delete_customer(customer_id: str):
+        """Delete a customer's voiceprint at DetectifAI and their record here (DPDP: deletion on request)."""
+        if not valid_customer_id(customer_id):
+            raise ApiError(400, "invalid_customer_id", "Invalid customer_id.")
+        try:
+            await client.delete_speaker(customer_id)
+        except DetectifError as e:
+            if e.status != 404:  # already gone upstream is fine
+                raise upstream_to_api_error(e) from None
+        removed = store.delete_customer(customer_id)
+        return {"ok": True, "customer_id": customer_id, "removed_local": removed}
 
     @app.post("/api/enroll")
     async def enroll(request: Request, file: UploadFile = File(...), customer_id: str = Form(...),
@@ -332,11 +331,11 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
         phone_last4 = (phone_last4 or "").strip() or None
         if phone_last4 is not None and not (len(phone_last4) == 4 and phone_last4.isdigit()):
             raise ApiError(400, "invalid_phone_last4", "phone_last4 must be exactly 4 digits.")
-        if mode == "live":
-            ok, msg = public_limiter.check(request, "enroll")
-            if not ok:
-                raise ApiError(429, "public_limit", msg)
+        ok, msg = public_limiter.check(request, "enroll")
+        if not ok:
+            raise ApiError(429, "public_limit", msg)
         data = await _read_upload(file)
+        debug_dump("enroll", customer_id, data)
         dur = wav_duration(data)
         if dur is not None and dur < ENROLL_MIN_SECONDS:
             raise ApiError(422, "audio_too_short",
@@ -346,23 +345,17 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
             raise ApiError(422, "audio_too_long", f"Enrollment audio must be at most 60 s; got {dur:.1f} s.",
                            audio_seconds=round(dur, 2))
 
-        async def _call():
+        async with upstream.lock:
+            await upstream.ensure_credits(MIN_ENROLL_BALANCE)
             try:
-                return await client.enroll(data, file.filename, file.content_type, customer_id, display_name)
+                resp = await client.enroll(data, file.filename, file.content_type, customer_id, display_name)
             except DetectifError as e:
                 if e.status == 402 and e.credits:
                     upstream.note_balance(e.credits.get("available"))
                 raise upstream_to_api_error(e) from None
 
-        if mode == "live":
-            async with upstream.lock:
-                await upstream.ensure_credits(MIN_ENROLL_BALANCE)
-                resp = await _call()
-        else:
-            resp = await _call()
-
         credits = None
-        if mode == "live" and isinstance(resp.get("credits"), dict):
+        if isinstance(resp.get("credits"), dict):
             credits = {"charged": resp["credits"].get("charged"), "balance": resp["credits"].get("balance")}
             upstream.note_balance(credits["balance"])
         speaker = resp.get("speaker") or {}
@@ -371,15 +364,13 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
             "customer_id": customer_id,
             "display_name": display_name,
             "phone_last4": phone_last4,
-            "enrolled_at": (existing or {}).get("enrolled_at") if is_enrolled(existing) else now_iso(),
+            "enrolled_at": (existing or {}).get("enrolled_at") or now_iso(),
             "samples": speaker.get("samples") or ((existing or {}).get("samples") or 0) + 1,
-            "mode": mode,
         })
         upstream.mark_speakers_synced()
         quality = resp.get("quality") or {}
         return {
             "ok": True,
-            "mode": mode,
             "customer": _public_customer(customer),
             "quality": {"speech_seconds": quality.get("speech_seconds"),
                         "duration_seconds": quality.get("duration_seconds")},
@@ -390,8 +381,11 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
     @app.post("/api/check")
     async def check(request: Request, file: UploadFile = File(...), customer_id: str = Form(""),
                     action: str = Form(...), amount: Optional[str] = Form(None), call_id: str = Form(""),
-                    trigger: str = Form("manual"), transcript: Optional[str] = Form(None),
-                    mock_scenario: Optional[str] = Form(None)):
+                    trigger: str = Form("voicebot"), transcript: Optional[str] = Form(None),
+                    deepfake_file: Optional[UploadFile] = File(None)):
+        """`file` is the caller's voice to check. With `deepfake_file` (virtual agent), `file` is only the spoken
+        passphrase and is used for speaker verification, while the deepfake check runs on `deepfake_file`: the
+        caller's natural, uncut speech, since a short passphrase is below the deepfake check's 4 s minimum."""
         customer_id = (customer_id or "").strip()
         if customer_id and not valid_customer_id(customer_id):
             raise ApiError(400, "invalid_customer_id",
@@ -400,23 +394,28 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
         if action not in risk.ACTIONS:
             raise ApiError(400, "invalid_action", f"action must be one of {', '.join(risk.ACTIONS)}.")
         amount_value = _parse_amount(amount)
-        trigger = (trigger or "manual").strip()
+        trigger = (trigger or "").strip()
         if trigger not in TRIGGERS:
-            trigger = "manual"
-        scenario = None
-        if mode == "mock":
-            scenario = (mock_scenario or "").strip() or "genuine"
-            if scenario not in MOCK_SCENARIOS:
-                raise ApiError(400, "invalid_mock_scenario",
-                               f"mock_scenario must be one of {', '.join(MOCK_SCENARIOS)}.")
+            trigger = TRIGGERS[0]
 
         data = await _read_upload(file)
+        debug_dump("check", customer_id or "unknown", data)
+        df_data = await _read_upload(deepfake_file) if deepfake_file is not None else None
+        if df_data is not None:
+            debug_dump("deepfake", customer_id or "unknown", df_data)
+            df_dur = wav_duration(df_data)
+            if df_dur is not None and df_dur <= MIN_DEEPFAKE_SECONDS:
+                raise ApiError(422, "audio_too_short", f"deepfake_file is {df_dur:.1f} s; the deepfake check needs "
+                               f"more than {MIN_DEEPFAKE_SECONDS:g} s.", audio_seconds=round(df_dur, 2))
         customer = store.get_customer(customer_id) if customer_id else None
-        enrolled = is_enrolled(customer)
+        enrolled = customer is not None
 
         dur = wav_duration(data)
         if dur is not None:
-            min_needed = max(MIN_DEEPFAKE_SECONDS, MIN_VERIFY_SECONDS if enrolled else 0.0)
+            if df_data is not None:  # `file` is only verified (or, unenrolled, not used at all)
+                min_needed = MIN_VERIFY_SECONDS - 0.05 if enrolled else 0.0
+            else:
+                min_needed = max(MIN_DEEPFAKE_SECONDS, MIN_VERIFY_SECONDS if enrolled else 0.0)
             if dur <= min_needed:
                 raise ApiError(422, "audio_too_short",
                                f"Clip is {dur:.1f} s; the deepfake check needs more than {min_needed:g} s of audio "
@@ -426,20 +425,47 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
                 raise ApiError(422, "audio_too_long", f"Clip is {dur:.1f} s; send at most {max_allowed:g} s "
                                "(5–20 s recommended).", audio_seconds=round(dur, 2))
 
-        if mode == "live":
-            ok, msg = public_limiter.check(request, "check")
-            if not ok:
-                raise ApiError(429, "public_limit", msg)
+        ok, msg = public_limiter.check(request, "check")
+        if not ok:
+            raise ApiError(429, "public_limit", msg)
         fname, ctype = file.filename or "clip.wav", file.content_type or "audio/wav"
         request_ids: list[str] = []
         notes: dict = {}
 
-        async def _run() -> dict:
+        async def _run_split() -> dict:
+            """Speaker verification on the passphrase, deepfake detection on the separate natural clip."""
+            out = None
             if enrolled:
                 try:
-                    resp = await client.verify(data, fname, ctype, customer_id, detect_deepfake=True,
-                                               scenario=scenario)
-                    out = normalize_verify(resp)
+                    out = normalize_verify(await client.verify(data, fname, ctype, customer_id,
+                                                               detect_deepfake=False))
+                    request_ids.append(out["request_id"])
+                except DetectifError as e:
+                    if e.request_id:
+                        request_ids.append(e.request_id)
+                    if e.status == 404 and e.code == "speaker_not_found":
+                        notes["speaker_note"] = "Customer voiceprint not found at DetectifAI — identity unverified"
+                    elif e.status == 422:
+                        notes["speaker_note"] = f"Passphrase too short to verify ({e.message}) — identity unverified"
+                    else:
+                        raise
+            det = normalize_detect(await client.detect(df_data, "deepfake.wav", "audio/wav"))
+            request_ids.append(det["request_id"])
+            if out is None:
+                return det
+            out["deepfake"], out["deepfake_error"] = det["deepfake"], None
+            out["charged"] = (out.get("charged") or 0) + (det.get("charged") or 0)
+            if det.get("balance") is not None:
+                out["balance"] = det["balance"]
+            return out
+
+        async def _run() -> dict:
+            if df_data is not None:
+                return await _run_split()
+            if enrolled:
+                try:
+                    out = normalize_verify(await client.verify(data, fname, ctype, customer_id,
+                                                               detect_deepfake=True))
                     request_ids.append(out["request_id"])
                     return out
                 except DetectifError as e:
@@ -454,18 +480,14 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
                                                  "identity unverified")
                     else:
                         raise
-            resp = await client.detect(data, fname, ctype, scenario=scenario)
-            out = normalize_detect(resp)
+            out = normalize_detect(await client.detect(data, fname, ctype))
             request_ids.append(out["request_id"])
             return out
 
         t0 = time.perf_counter()
         try:
-            if mode == "live":
-                async with upstream.lock:
-                    await upstream.ensure_credits(MIN_CHECK_BALANCE)
-                    out = await _run()
-            else:
+            async with upstream.lock:
+                await upstream.ensure_credits(MIN_CHECK_BALANCE)
                 out = await _run()
         except DetectifError as e:
             if e.status == 402 and e.credits:
@@ -481,15 +503,12 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
                                       speaker_note=notes.get("speaker_note"), deepfake_note=deepfake_note)
         alert = risk.build_alert(assessment_risk["decision"], action, amount_value)
 
-        credits = None
-        if mode == "live":
-            credits = {"charged": out["charged"], "balance": out["balance"]}
-            upstream.note_balance(out["balance"])
+        credits = {"charged": out["charged"], "balance": out["balance"]}
+        upstream.note_balance(out["balance"])
 
         audio_seconds = round(dur, 2) if dur is not None else out.get("duration_seconds")
         assessment = {
             "check_id": f"chk_{uuid.uuid4().hex[:16]}",
-            "mode": mode,
             "created_at": now_iso(),
             "call_id": (call_id or "").strip() or None,
             "customer_id": customer_id or None,
@@ -509,8 +528,6 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
             "audio_seconds": audio_seconds,
             "customer_response": None,
         }
-        if mode == "mock":
-            assessment["mock_scenario"] = scenario
         store.add_assessment(assessment)
         broadcaster.publish("assessment", assessment)
         if alert["sent"]:
@@ -523,7 +540,6 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
                 "decision": assessment_risk["decision"],
                 "message": alert["message"],
                 "created_at": assessment["created_at"],
-                "mode": mode,
             })
         return assessment
 
@@ -565,19 +581,14 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
 
     @app.post("/api/feedback")
     async def feedback(body: FeedbackBody):
-        if mode != "live":
-            return {"ok": True, "mode": mode}
-        if body.operation_id.startswith("mock_"):
-            raise ApiError(400, "invalid_operation_id", "Cannot send feedback for a mock operation.")
         try:
             await client.feedback(body.operation_id, body.correct)
         except DetectifError as e:
             api = upstream_to_api_error(e)
             status_code = e.status if 400 <= e.status < 500 else api.status
-            return JSONResponse({"ok": False, "mode": mode,
-                                 "error": {"code": e.code if e.status else api.code, "message": e.message}},
-                                status_code=status_code)
-        return {"ok": True, "mode": mode}
+            return JSONResponse({"ok": False, "error": {"code": e.code if e.status else api.code,
+                                                        "message": e.message}}, status_code=status_code)
+        return {"ok": True}
 
     # Attack Lab (local red-team, laptop-only): /api/attack/* + a guarded /attack.html
     frontend_path = Path(frontend_dir) if frontend_dir else ROOT / "frontend"
@@ -586,26 +597,14 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
     # Phone-to-console helpline calls (WebRTC signaling): /api/call/ws
     calls.register(app)
 
-    # Live call transcript: the console sends short caller utterances; local Whisper on the GPU service.
-    @app.post("/api/transcribe")
-    async def transcribe(file: UploadFile = File(...), language: str = Form("en")):
-        data = await file.read()
-        if not data:
-            raise ApiError(400, "empty_file", "The uploaded audio file is empty.")
-        if len(data) > MAX_TRANSCRIBE_BYTES:
-            raise ApiError(413, "file_too_large", "Utterances must be under 1 MB (about 30 s of 16 kHz audio).")
-        lang = (language or "en").split("-")[0].lower()
-        if lang not in ("en", "hi"):
-            raise ApiError(400, "invalid_language", "language must be en or hi.")
-        try:
-            body = await cloner.transcribe(data, lang)
-        except attack.ClonerError as e:
-            raise ApiError(e.status, "asr_unavailable" if e.status in (503, 504) else e.code, e.message) from None
-        return {"text": str(body.get("text") or ""), "ms": body.get("ms"), "model": body.get("model")}
-
     # Static frontend LAST so /api/* routes win.
     app.mount("/", LazyStatic(frontend_path), name="frontend")
     return app
 
 
-app = create_app()
+def __getattr__(name: str):
+    """`backend.app:app` is built on first access, so importing create_app needs no API key."""
+    if name == "app":
+        globals()["app"] = create_app()
+        return globals()["app"]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

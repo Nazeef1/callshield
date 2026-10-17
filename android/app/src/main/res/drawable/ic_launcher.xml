@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- CallShield shield mark -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="32" android:viewportHeight="32">
+    <path android:fillColor="#0F1115" android:pathData="M0,0h32v32h-32z" />
+    <path android:fillColor="#D4FF2A"
+        android:pathData="M16,4.5l9,3.3v6.7c0,5.4 -3.8,10 -9,11.7c-5.2,-1.7 -9,-6.3 -9,-11.7V7.8l9,-3.3z" />
+    <path android:strokeColor="#0F1115" android:strokeWidth="1.8" android:strokeLineCap="round"
+        android:strokeLineJoin="round" android:fillColor="#00000000"
+        android:pathData="M10.6,15.6h2l1.3,-3.2l2.1,6.4l1.9,-4.8l1,1.6h2.2" />
+</vector>

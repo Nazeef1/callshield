@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-# CallShield launcher (Git Bash / macOS / Linux)
-#   ./run.sh            -> live mode if DETECTIF_API_KEY is in .env, else mock
-#   ./run.sh --mock     -> force mock mode (no DetectifAI credits used)
+# CallShield launcher (Git Bash / macOS / Linux). Needs DETECTIF_API_KEY in .env.
+#   ./run.sh
 #   PORT=8080 ./run.sh
 set -euo pipefail
 cd "$(dirname "$0")"
-if [ "${1:-}" = "--mock" ]; then export CALLSHIELD_MODE=mock; fi
 PY=".venv/Scripts/python.exe"
 [ -x "$PY" ] || PY=".venv/bin/python"
 PORT="${PORT:-8000}"
-echo "CallShield -> http://localhost:${PORT}  (mode: ${CALLSHIELD_MODE:-auto})"
+echo "CallShield -> http://localhost:${PORT}"
 exec "$PY" -m uvicorn backend.app:app --host 0.0.0.0 --port "$PORT" --timeout-graceful-shutdown 2

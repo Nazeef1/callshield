@@ -10,3 +10,4 @@ cloner/.venv/
 cloner/.cache/
 docs/
 *.pyc
+~$*

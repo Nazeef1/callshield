@@ -1,4 +1,4 @@
-// CallShield — fetch wrappers + SSE helper for the backend API defined in CONTRACT.md.
+// CallShield — fetch wrappers + SSE helper for the backend API.
 // All URLs are same-origin and relative to the site root.
 
 export class ApiError extends Error {
@@ -75,12 +75,12 @@ async function request(method, url, { json, form, timeout = 60000 } = {}) {
 export const api = {
   status: () => request('GET', '/api/status', { timeout: 15000 }),
   customers: () => request('GET', '/api/customers', { timeout: 15000 }),
+  /** Deletes the customer's voiceprint at DetectifAI and their record. */
+  deleteCustomer: (id) => request('DELETE', `/api/customers/${encodeURIComponent(id)}`, { timeout: 30000 }),
   /** form: FormData with file, customer_id, display_name, phone_last4 */
   enroll: (form) => request('POST', '/api/enroll', { form, timeout: 120000 }),
-  /** form: FormData with file, customer_id, action, amount, call_id, trigger, transcript, mock_scenario */
+  /** form: FormData with file (passphrase), deepfake_file?, customer_id, action, amount, call_id, trigger, transcript */
   check: (form) => request('POST', '/api/check', { form, timeout: 120000 }),
-  /** form: FormData with file (16 kHz WAV utterance), language -> { text, ms, model } */
-  transcribe: (form) => request('POST', '/api/transcribe', { form, timeout: 30000 }),
   assessments: (limit = 50) => request('GET', `/api/assessments?limit=${encodeURIComponent(limit)}`, { timeout: 15000 }),
   respond: (checkId, response) =>
     request('POST', `/api/alerts/${encodeURIComponent(checkId)}/respond`, { json: { response } }),

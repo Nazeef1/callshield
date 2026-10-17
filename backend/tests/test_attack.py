@@ -6,15 +6,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-os.environ["CALLSHIELD_MODE"] = "mock"  # never let an import build a live client
-
 import httpx
 from fastapi.testclient import TestClient
 
 from backend.app import create_app
 from backend.attack import ClonerClient
 from backend.audio import make_sine_wav
-from backend.detectif import MockClient
+from backend.tests.fakes import FakeClient
 
 REF_WAV = make_sine_wav(20.0)
 CLONE_WAV = make_sine_wav(8.0)
@@ -56,8 +54,7 @@ class AttackLabTests(unittest.TestCase):
         (self.frontend / "attack.html").write_text("<!doctype html><title>Attack Lab</title>", encoding="utf-8")
         self.fake = FakeCloner()
         self.cloner = ClonerClient("http://cloner.test", transport=httpx.MockTransport(self.fake))
-        self.app = create_app(mode="mock", client=MockClient(latency=(0, 0), seed=1),
-                              store_path=Path(self.tmp.name) / "store.json", frontend_dir=self.frontend,
+        self.app = create_app(client=FakeClient(), store_path=Path(self.tmp.name) / "store.json", frontend_dir=self.frontend,
                               cloner=self.cloner)
         self.local = TestClient(self.app, base_url="http://localhost:8000", client=LOCAL)
         self.local.__enter__()
@@ -83,6 +80,7 @@ class AttackLabTests(unittest.TestCase):
         self.assertTrue(body["enabled"])
         self.assertIsNone(body["reason"])
         self.assertEqual(body["cloner"], HEALTH)
+        self.assertNotIn("mode", body)
         r = self.local.get("/api/attack/status?probe=0")
         self.assertTrue(r.json()["enabled"])
         self.assertIsNone(r.json()["cloner"])

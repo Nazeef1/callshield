@@ -1,4 +1,4 @@
-// CallShield — helpline calls between the caller page (phone) and the agent console (laptop).
+// CallShield — helpline calls: a caller (phone app or Attack Lab) dials the receive screen (laptop).
 // Signaling goes over /api/call/ws (see backend/calls.py); audio flows peer to peer over WebRTC.
 
 const ICE_SERVERS = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }];
@@ -107,6 +107,28 @@ export class PeerLink {
   close() {
     try { this.pc.close(); } catch { /* ignore */ }
   }
+}
+
+/**
+ * Send `stream` through a WebRTC connection to ourselves and return what comes out: the same Opus
+ * encode/decode a real call applies. Used to record the enrollment voiceprint so it sounds like the call
+ * audio it will later be compared with. -> { stream, close() }
+ */
+export async function callCodecLoopback(stream) {
+  const tx = new RTCPeerConnection();
+  const rx = new RTCPeerConnection();
+  tx.onicecandidate = (e) => { if (e.candidate) rx.addIceCandidate(e.candidate).catch(() => {}); };
+  rx.onicecandidate = (e) => { if (e.candidate) tx.addIceCandidate(e.candidate).catch(() => {}); };
+  const received = new Promise((resolve) => {
+    rx.ontrack = (e) => resolve(e.streams[0] || new MediaStream([e.track]));
+  });
+  for (const t of stream.getAudioTracks()) tx.addTrack(t, stream);
+  await tx.setLocalDescription(await tx.createOffer());
+  await rx.setRemoteDescription(tx.localDescription);
+  await rx.setLocalDescription(await rx.createAnswer());
+  await tx.setRemoteDescription(rx.localDescription);
+  const out = await received;
+  return { stream: out, close() { try { tx.close(); rx.close(); } catch { /* ignore */ } } };
 }
 
 /** Play a remote stream. Chrome also needs this before Web Audio can read a remote WebRTC track. */

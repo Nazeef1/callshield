@@ -1,7 +1,5 @@
-# Render Blueprint for CallShield: agent console, voice enrollment, customer phone and ready-made
-# deepfake samples (frontend/samples). Runs fully in the cloud: no laptop needed.
-# Live voice cloning (Attack Lab) needs a GPU, so it is disabled here; the clones were generated
-# in advance from a consenting team member's own voice and ship as samples.
+# Render Blueprint for CallShield: the receive screen (/) and the phone app's pages (/app.html).
+# The Attack Lab needs the presenter's laptop (local GPU cloner, laptop-only gating), so it is off here.
 services:
   - type: web
     name: callshield
