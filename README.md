@@ -110,6 +110,9 @@ adb reverse tcp:8000 tcp:8000               # the app opens http://localhost:800
 | `CALLSHIELD_CALL_CODE=…` | Requires `?code=…` on the call socket (leave unset on a public demo link) |
 | `CALLSHIELD_DEBUG_AUDIO=1` | Keeps a copy of enrollment / check audio in `data/debug/` for diagnosis |
 | `CALLSHIELD_CLONER_URL`, `CALLSHIELD_CLONER_TOKEN` | Where the cloning service runs and its shared secret |
+| `CALLSHIELD_PUBLIC_CHECKS_PER_HOUR` (8), `CALLSHIELD_PUBLIC_CHECKS_PER_IP` (4) | Hourly cap on live checks that arrive through a tunnel/public link (all visitors / per visitor IP); laptop-local requests are never capped |
+| `CALLSHIELD_PUBLIC_ENROLLS_PER_HOUR` (4) | Hourly cap on enrollments through the public link |
+| `CALLSHIELD_PUBLIC_CLONES_PER_HOUR` (10), `CALLSHIELD_PUBLIC_CLONES_PER_IP` (4) | Hourly cap on voice clones through the public link (all visitors / per visitor IP) |
 
 Delete voiceprints (DetectifAI + local record): `python tools/delete_enrollments.py <customer_id>…` or `--all`.
 Tests: `.venv\Scripts\python -m unittest` (a fake DetectifAI client; no credits used).
