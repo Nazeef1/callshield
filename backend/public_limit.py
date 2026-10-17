@@ -6,6 +6,8 @@ the team's credits. Limits are configurable with env vars:
   CALLSHIELD_PUBLIC_CHECKS_PER_HOUR   (default 8)   live checks via the public link, all visitors together
   CALLSHIELD_PUBLIC_CHECKS_PER_IP     (default 4)   per visitor IP per hour
   CALLSHIELD_PUBLIC_ENROLLS_PER_HOUR  (default 4)   enrollments via the public link per hour
+  CALLSHIELD_PUBLIC_CLONES_PER_HOUR   (default 10)  voice clones via the public link, all visitors together
+  CALLSHIELD_PUBLIC_CLONES_PER_IP     (default 4)   voice clones per visitor IP per hour
 """
 from __future__ import annotations
 
