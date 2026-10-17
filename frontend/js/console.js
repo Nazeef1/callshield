@@ -2,6 +2,7 @@
 import { api, connectEvents } from './api.js';
 import { MicCapture, encodeWav, drawPeaks, estimateSpeechSeconds, SAMPLE_RATE } from './audio.js';
 import { detectAction, parseAmount, keywordRanges } from './keywords.js';
+import { callSocket, PeerLink, playStream } from './call.js';
 import {
   $, $$, esc, fmtINR, fmtNum, fmtTime, ACTIONS, TRIGGERS, decisionMeta, replyOf, ICONS,
   toast, showError, confirmDialog, initStatus, setSseDot, randomId,
@@ -115,6 +116,11 @@ async function startCall() {
   }
   mic.onended = () => { if (callActive) { toast('Microphone disconnected.', { kind: 'warn' }); endCall(); } };
   btn.disabled = false;
+  beginCall('On call');
+  startRecognition();
+}
+
+function beginCall(label) {
   callActive = true;
   callStartedAt = performance.now();
   callId = randomId('call');
@@ -123,21 +129,229 @@ async function startCall() {
   renderTranscript('');
   $('#btn-start').hidden = true;
   $('#btn-end').hidden = false;
-  $('#call-state').textContent = 'On call';
+  $('#call-state').textContent = label;
   $('#call-state').classList.add('on');
   $('#wave-empty').hidden = true;
-  startRecognition();
 }
 
-function endCall() {
+function endCall({ remote = false } = {}) {
   callActive = false;
   pendingAuto = null;
   stopRecognition();
+  stopCallerAsr();
   mic.stop();
+  if (phone) {
+    if (!remote) callSock.send({ type: 'hangup' });
+    phone.link.close();
+    phone.local.getTracks().forEach((t) => t.stop());
+    if (phone.el) phone.el.srcObject = null;
+    phone = null;
+    $('#manual-actions').hidden = true;
+  }
   $('#btn-start').hidden = false;
   $('#btn-end').hidden = true;
   $('#call-state').textContent = 'Call ended';
   $('#call-state').classList.remove('on');
+}
+
+// ---------------------------------------------------------------- phone calls (caller.html -> this console)
+let callSock = null;
+let phone = null;                // { callerId, link, local, el } while a phone call is up
+const ringing = new Map();       // caller_id -> {customer_id, display_name}
+
+function onCallMessage(msg) {
+  switch (msg.type) {
+    case 'incoming':
+      ringing.set(msg.caller_id, { customer_id: msg.customer_id, display_name: msg.display_name });
+      renderIncoming();
+      if (!callActive) toast(`Incoming call${msg.display_name ? ` from ${msg.display_name}` : ''}.`, { kind: 'info', title: 'Phone line' });
+      break;
+    case 'cancel':
+    case 'taken':
+      ringing.delete(msg.caller_id);
+      renderIncoming();
+      if (phone && phone.callerId === msg.caller_id && !mic.running) { toast('The caller hung up.', { kind: 'warn' }); endCall({ remote: true }); }
+      break;
+    case 'signal':
+      if (phone) phone.link.handleSignal(msg.data).catch((e) => console.error(e));
+      break;
+    case 'transcript':
+      // Optional phone-side transcript: only used when the laptop can't transcribe.
+      if (!phone || !callActive || asrWorks !== false) break;
+      if (msg.final) { onFinalTranscript(String(msg.text || '').trim()); renderTranscript(''); }
+      else renderTranscript(String(msg.text || ''));
+      break;
+    case 'hangup':
+      if (phone) { toast('The caller hung up.', { kind: 'info', title: 'Phone line' }); endCall({ remote: true }); }
+      break;
+    default: break;
+  }
+}
+
+function onCallSocketState(st) {
+  const el = $('#phone-line');
+  el.textContent = st === 'open' ? `Phone line: ready. Callers dial in from ${location.origin}/caller.html`
+    : st === 'denied' ? 'Phone line: wrong access code (open this page with ?code=…).'
+      : 'Phone line: connecting…';
+  if (st !== 'open') { ringing.clear(); renderIncoming(); }
+}
+
+function renderIncoming() {
+  const first = [...ringing.entries()].pop();
+  $('#incoming').hidden = !first || callActive;
+  if (!first) return;
+  const [, r] = first;
+  $('#incoming-who').textContent = `Incoming call · ${r.display_name || 'unknown caller'}${ringing.size > 1 ? ` (+${ringing.size - 1} waiting)` : ''}`;
+}
+
+async function answerPhone() {
+  const first = [...ringing.entries()].pop();
+  if (!first || callActive) return;
+  const [callerId, r] = first;
+  let local;
+  try {
+    local = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true }, video: false });
+  } catch (e) {
+    toast(`Allow the microphone so the caller can hear you (${e.name || e.message}).`, { kind: 'error', title: 'Microphone' });
+    return;
+  }
+  ringing.delete(callerId);
+  const sel = $('#customer-select');
+  if (r.customer_id && [...sel.options].some((o) => o.value === r.customer_id)) sel.value = r.customer_id;
+  else sel.value = '';
+  onCustomerChange();
+  phone = { callerId, local, el: null, link: null };
+  phone.link = new PeerLink({
+    sendSignal: (data) => callSock.send({ type: 'signal', data }),
+    onRemoteStream: (stream) => startPhoneCapture(stream),
+    onState: (s) => {
+      if (s === 'failed' && phone) { toast('The call audio connection failed.', { kind: 'error', title: 'Phone line' }); endCall(); }
+    },
+  });
+  phone.link.addStream(local);
+  callSock.send({ type: 'accept', caller_id: callerId });
+  beginCall('Connecting…');
+  $('#manual-actions').hidden = false;
+  renderIncoming();
+}
+
+async function startPhoneCapture(stream) {
+  if (!phone || phone.el) return;
+  phone.el = playStream(stream);
+  try {
+    mic.reset();
+    await mic.start({ stream });
+  } catch (e) {
+    toast(`Could not capture the caller's audio: ${e.message || e}`, { kind: 'error' });
+    return;
+  }
+  mic.onended = null;
+  // Transcribe the caller on this laptop: Chrome speech recognition fed the call's audio track; if this
+  // Chrome can't do that, the local Whisper service (if running); otherwise the agent uses the buttons.
+  try {
+    if (!SR) throw new Error('no SpeechRecognition');
+    startRecognition({ track: mic.tapTrack() });
+    setTranscriptNote("Transcribing the caller's call audio on this laptop.");
+  } catch (e) {
+    console.warn('SpeechRecognition cannot take the call audio track; trying local Whisper', e);
+    stopRecognition();
+    startCallerAsr();
+  }
+  callStartedAt = performance.now();
+  $('#call-state').textContent = 'On call · phone';
+}
+
+// ---------------------------------------------------------------- laptop transcription of the caller (phone calls)
+// The caller's audio is already in `mic`; cut it into utterances at pauses and transcribe them with the
+// local Whisper service (/api/transcribe). No cloud speech service and nothing runs on the phone.
+const UTT_PREROLL = 0.3;        // s of audio kept before speech starts
+const UTT_END_SILENCE = 0.7;    // s of silence that ends an utterance
+const UTT_MAX = 8;              // s, hard cut for long monologues
+const UTT_MIN_VOICED = 0.5;     // s of voiced audio needed to bother transcribing
+const VOICE_RMS = 0.01;         // ~ -40 dBFS
+let asr = null;                 // { off, seg, segLen, voiced, silence, queue, busy }
+let asrWorks = null;            // null = untested, true = transcribing on the laptop, false = service missing
+
+function startCallerAsr() {
+  stopCallerAsr();
+  asr = { seg: null, segLen: 0, voiced: 0, silence: 0, queue: [], busy: false };
+  asr.off = mic.onData(onCallerAudio);
+}
+
+function stopCallerAsr() {
+  if (asr && asr.off) asr.off();
+  asr = null;
+}
+
+function onCallerAudio(x) {
+  if (!asr) return;
+  let sum = 0;
+  for (let i = 0; i < x.length; i++) sum += x[i] * x[i];
+  const secs = x.length / SAMPLE_RATE;
+  const voiced = Math.sqrt(sum / x.length) > VOICE_RMS;
+  if (!asr.seg) {
+    if (!voiced) return;
+    asr.seg = [mic.getLast(UTT_PREROLL + secs)];  // ring buffer already holds x
+    asr.segLen = asr.seg[0].length / SAMPLE_RATE;
+    asr.voiced = secs;
+    asr.silence = 0;
+    return;
+  }
+  asr.seg.push(x);
+  asr.segLen += secs;
+  if (voiced) { asr.voiced += secs; asr.silence = 0; } else asr.silence += secs;
+  if (asr.silence >= UTT_END_SILENCE || asr.segLen >= UTT_MAX) flushUtterance();
+}
+
+function flushUtterance() {
+  const { seg, voiced } = asr;
+  asr.seg = null;
+  if (voiced < UTT_MIN_VOICED) return;
+  let n = 0;
+  for (const p of seg) n += p.length;
+  const all = new Float32Array(n);
+  let o = 0;
+  for (const p of seg) { all.set(p, o); o += p.length; }
+  if (asr.queue.length >= 3) asr.queue.shift();  // falling behind: drop the oldest
+  asr.queue.push(all);
+  pumpAsr();
+}
+
+async function pumpAsr() {
+  if (!asr || asr.busy || !asr.queue.length) return;
+  const mine = asr;
+  mine.busy = true;
+  const samples = mine.queue.shift();
+  renderTranscript('…');
+  try {
+    const fd = new FormData();
+    fd.append('file', encodeWav(samples, SAMPLE_RATE), 'utterance.wav');
+    fd.append('language', $('#lang-select').value);
+    const res = await api.transcribe(fd);
+    if (asrWorks !== true) { asrWorks = true; setTranscriptNote('Transcribing the caller on this laptop (local Whisper).'); }
+    const text = String((res && res.text) || '').trim();
+    if (text && phone && callActive) onFinalTranscript(text);
+  } catch (e) {
+    if (e.code === 'asr_unavailable' || e.code === 'network') {
+      asrWorks = false;
+      setTranscriptNote('Laptop transcription is off: start the GPU service (.\\run_cloner.ps1). Use the action buttons meanwhile.');
+      mine.queue.length = 0;
+    } else {
+      console.warn('transcribe failed', e);
+    }
+  } finally {
+    mine.busy = false;
+    if (phone && callActive) renderTranscript('');
+    pumpAsr();
+  }
+}
+
+function declinePhone() {
+  const first = [...ringing.entries()].pop();
+  if (!first) return;
+  callSock.send({ type: 'decline', caller_id: first[0] });
+  ringing.delete(first[0]);
+  renderIncoming();
 }
 
 // ---------------------------------------------------------------- speech recognition
@@ -147,7 +361,9 @@ let recWanted = false;
 let recNetErrors = 0;
 let transcriptLines = []; // {text, auto}
 
-function startRecognition() {
+/** Live transcript. With `track` (a phone call's incoming audio) Chrome transcribes the caller instead of the
+ *  laptop mic; throws if this Chrome can't take an audio track. */
+function startRecognition({ track = null } = {}) {
   if (!SR) return;
   recWanted = true;
   setTranscriptNote('');
@@ -184,10 +400,11 @@ function startRecognition() {
     if (rec !== me) return;
     if (recWanted && callActive) {
       setTimeout(() => {
-        if (rec === me && recWanted && callActive) { try { me.start(); } catch { /* already started */ } }
+        if (rec === me && recWanted && callActive) { try { track ? me.start(track) : me.start(); } catch { /* already started */ } }
       }, 250);
     }
   };
+  if (track) { rec.start(track); return; }
   try { rec.start(); } catch (e) { console.warn('SpeechRecognition start failed', e); }
 }
 
@@ -755,6 +972,11 @@ function onCustomerResponse(r) {
   const who = a ? (a.customer_name || a.customer_id || 'Customer') : 'Customer';
   if (r.response === 'not_me') toast(`${who} replied NOT ME on their registered phone — treat this call as fraud.`, { kind: 'error', title: 'Customer replied: NOT ME', timeout: 9000 });
   else if (r.response === 'me') toast(`${who} confirmed it was them.`, { kind: 'ok', title: 'Customer replied: it was me' });
+  const fb = (r.auto_feedback || []).filter((f) => f.ok);
+  if (fb.length) {
+    const parts = fb.map((f) => `${f.signal} verdict ${f.correct ? 'correct' : 'wrong'}`).join(', ');
+    toast(`Reported to DetectifAI: ${parts}.`, { kind: 'info', title: 'Feedback loop', timeout: 6000 });
+  }
 }
 
 // ---------------------------------------------------------------- render loop
@@ -787,11 +1009,13 @@ function sessionSet(k, v) { try { sessionStorage.setItem(k, v); } catch { /* ign
 // ---------------------------------------------------------------- wiring
 function wire() {
   $('#btn-start').addEventListener('click', startCall);
-  $('#btn-end').addEventListener('click', endCall);
+  $('#btn-end').addEventListener('click', () => endCall());
+  $('#btn-answer').addEventListener('click', answerPhone);
+  $('#btn-decline').addEventListener('click', declinePhone);
   $('#customer-select').addEventListener('change', onCustomerChange);
   $('#lang-select').addEventListener('change', () => {
     sessionSet('cs.lang', $('#lang-select').value);
-    if (callActive && SR) { stopRecognition(); startRecognition(); }
+    if (callActive && SR && !phone) { stopRecognition(); startRecognition(); }
     renderTranscript('');
   });
   for (const b of $$('.action-btn')) b.addEventListener('click', () => onActionClick(b.dataset.action));
@@ -813,7 +1037,7 @@ function wire() {
     if (a) renderAssessment(a, { animate: true });
   });
   window.addEventListener('focus', () => { if (!inFlight) loadCustomers(); });
-  window.addEventListener('beforeunload', () => { stopRecognition(); mic.stop(); });
+  window.addEventListener('beforeunload', () => { if (phone) endCall(); stopRecognition(); mic.stop(); });
 
   // restore per-session preferences
   const lang = sessionGet('cs.lang');
@@ -852,6 +1076,7 @@ function main() {
     onState: setSseDot,
     onReconnect: () => { loadAssessments(); status.refresh(); },
   });
+  callSock = callSocket('agent', { onMessage: onCallMessage, onState: onCallSocketState });
   requestAnimationFrame(tick);
 }
 

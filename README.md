@@ -92,6 +92,7 @@ Deepfake detection catches the clone. Speaker verification catches a real human 
 | Deepfake verdict `fake` | **+70** |
 | Deepfake verdict `not_sure` | +30 |
 | Deepfake verdict `real` | + round(score × 20) (0–20) |
+| Deepfake result missing (DetectifAI error / unavailable) | +30, and **never APPROVE** (fails closed) |
 | Speaker `no_match` | **+50** |
 | Speaker `match` but similarity < threshold + 0.10 (weak match) | +10 |
 | No speaker check (unknown caller / not enrolled) | +20 ("Caller not enrolled — identity unverified") |
@@ -105,7 +106,7 @@ Score is clamped to 0–100.
 | Decision | Rule | What happens |
 |---|---|---|
 | **BLOCK** | verdict = `fake` **or** score ≥ 70 | Action refused; customer alerted ("…blocked… your money is safe") |
-| **STEP UP** | score ≥ 35 **or** verdict = `not_sure` | Agent must complete extra verification; customer asked to confirm in the app |
+| **STEP UP** | score ≥ 35 **or** verdict = `not_sure` **or** no deepfake verdict | Agent must complete extra verification; customer asked to confirm in the app |
 | **APPROVE** | otherwise | Action proceeds; no alert |
 
 Risk level: high (≥ 70) / medium (≥ 35) / low. Every assessment lists its **reasons** in plain language, e.g.
@@ -168,6 +169,24 @@ Live checks spend real credits. The backend refuses a check when the balance is 
 | `/enroll.html` | **Customer** (onboarding) | Records or uploads 15–60 s of voice (≥ 10 s speech) and enrols it with DetectifAI as the customer's voiceprint |
 | `/phone.html` | **Customer's phone**: the trusted channel | Receives STEP UP / BLOCK alerts live over SSE; buttons **"It was me"** / **"Not me"** go straight back to the agent console |
 | `/attack.html` | **Team member, red-teaming** (presenter's laptop only) | Attack Lab: clone your own voice and fire it at CallShield (see below) |
+| `/caller.html` | **The caller**, on a phone | Calls the bank helpline: the agent console rings, and the call audio goes through CallShield (see below) |
+
+### Phone calls into the console (WebRTC)
+
+A phone can call the agent console like a real helpline call. Open `/caller.html` in Chrome on the phone, pick who you are
+calling as and tap **Call bank**; the console shows **Incoming call** and the agent clicks **Answer**. Both sides hear each other.
+
+- Audio flows **peer to peer** between the two browsers; the backend only relays call setup over `WS /api/call/ws`
+  (`backend/calls.py`). Both devices on the same network (e.g. a phone hotspot) is the reliable setup.
+- The console feeds the **caller's incoming audio** into the same 30 s rolling buffer, keyword trigger and `/api/check` as the
+  laptop mic. The agent's own voice is never checked.
+- **Live transcript runs on the laptop**, on the call audio (Chrome speech recognition fed a Web Audio copy of the caller's
+  track). Nothing runs on the phone; phone-side transcription is an optional, off-by-default box. If this Chrome can't take an
+  audio track, the console falls back to local Whisper on the GPU service (`/api/transcribe` → `cloner/asr.py`), then to the
+  action buttons.
+- The phone can **play a consented sample into the call** (its mic is muted meanwhile), so a clone reaches the agent over a real call.
+- The phone needs HTTPS for its mic: use the public link, or `adb reverse tcp:8000 tcp:8000` and open `http://localhost:8000/caller.html`.
+- Optional access code: set `CALLSHIELD_CALL_CODE` and open both pages with `?code=…` (leave it unset on the judges' link).
 
 ### Attack Lab (local red-team)
 

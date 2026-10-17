@@ -30,6 +30,7 @@ from starlette.datastructures import UploadFile
 DEFAULT_CLONER_URL = "http://127.0.0.1:8100"
 CLONE_TIMEOUT = 180.0
 HEALTH_TIMEOUT = 2.5
+TRANSCRIBE_TIMEOUT = 30.0
 MAX_TEXT_CHARS = 400
 MAX_REFERENCE_BYTES = 25 * 1024 * 1024
 ENGINES = ("local", "elevenlabs")
@@ -178,6 +179,18 @@ class ClonerClient:
         except Exception:
             body = {"ok": True}
         return resp.status_code, body if isinstance(body, dict) else {"ok": True, "result": body}
+
+    async def transcribe(self, wav: bytes, language: str) -> dict:
+        """Speech-to-text of a short caller utterance (the same local GPU service hosts Whisper)."""
+        resp = await self._request("POST", "/transcribe", timeout=TRANSCRIBE_TIMEOUT,
+                                   files={"file": ("utterance.wav", wav, "audio/wav")}, data={"language": language})
+        try:
+            body = resp.json()
+        except Exception:
+            body = None
+        if not isinstance(body, dict):
+            raise ClonerError(502, "cloner_bad_response", "The speech-to-text service returned an unexpected response.")
+        return body
 
     async def clone(self, reference: bytes, filename: str, content_type: str, text: str, engine: str,
                     language: str) -> httpx.Response:

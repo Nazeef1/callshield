@@ -79,6 +79,8 @@ export const api = {
   enroll: (form) => request('POST', '/api/enroll', { form, timeout: 120000 }),
   /** form: FormData with file, customer_id, action, amount, call_id, trigger, transcript, mock_scenario */
   check: (form) => request('POST', '/api/check', { form, timeout: 120000 }),
+  /** form: FormData with file (16 kHz WAV utterance), language -> { text, ms, model } */
+  transcribe: (form) => request('POST', '/api/transcribe', { form, timeout: 30000 }),
   assessments: (limit = 50) => request('GET', `/api/assessments?limit=${encodeURIComponent(limit)}`, { timeout: 15000 }),
   respond: (checkId, response) =>
     request('POST', `/api/alerts/${encodeURIComponent(checkId)}/respond`, { json: { response } }),

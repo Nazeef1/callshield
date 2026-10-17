@@ -20,6 +20,7 @@
     <a href="/" aria-current="page">Agent console</a>
     <a href="/enroll.html">Enroll voice</a>
     <a href="/phone.html" id="nav-phone" target="_blank" rel="noopener">Customer phone ↗</a>
+    <a href="/caller.html" target="_blank" rel="noopener">Caller ↗</a>
     <a href="/guide.html">How to use</a>
     <a href="/attack.html" id="nav-attack" class="nav-attack" hidden>Attack Lab</a>
   </nav>
@@ -49,6 +50,12 @@
       <button id="btn-end" type="button" class="btn btn-danger-ghost btn-lg" hidden></button>
     </div>
     <p class="customer-hint" id="customer-hint"></p>
+    <div class="incoming" id="incoming" hidden>
+      <span class="incoming-who" id="incoming-who"></span>
+      <button id="btn-answer" type="button" class="btn btn-accent">Answer</button>
+      <button id="btn-decline" type="button" class="btn btn-danger-ghost">Decline</button>
+    </div>
+    <p class="note" id="phone-line">Phone line: connecting…</p>
     <div class="wave-wrap">
       <canvas id="wave" class="wave" aria-label="Caller audio waveform, last 10 seconds"></canvas>
       <div class="wave-overlay" id="wave-empty">Start the call to capture the caller's audio</div>
@@ -103,7 +110,8 @@
         use <b>Google Chrome</b> and allow the microphone · Hindi works too (choose Hindi above).</p>
       <span class="auto-status" id="auto-status"></span>
     </div>
-    <div hidden>
+    <div id="manual-actions" hidden>
+    <p class="note">Phone call: the transcript comes from the caller's phone. If it misses the keyword, trigger the check here.</p>
     <div class="action-grid">
       <div class="transfer-cell">
         <button type="button" class="action-btn" data-action="fund_transfer"></button>

@@ -2,11 +2,13 @@
 
 score = 0
 deepfake.verdict: fake -> +70 ; not_sure -> +30 ; real -> + round(score*20)
+deepfake missing (check failed / unavailable) -> +30, treated like not_sure: never APPROVE (fail closed)
 speaker.decision: no_match -> +50 ; match with similarity < threshold+0.10 -> +10 (weak match)
 speaker missing (unknown caller / no enrollment) -> +20
 action: sim_otp_reset +15 ; fund_transfer +10 (+10 more if amount >= 50,000) ; limit_change +10 ; beneficiary_add +10
 clamp 0..100
-decision: BLOCK if verdict == fake or score >= 70 ; STEP_UP if score >= 35 or verdict == not_sure ; else APPROVE
+decision: BLOCK if verdict == fake or score >= 70 ; STEP_UP if score >= 35 or verdict == not_sure
+          or deepfake missing ; else APPROVE
 level: high (>=70) / medium (>=35) / low
 """
 from __future__ import annotations
@@ -114,8 +116,10 @@ def assess(deepfake: Optional[dict], speaker: Optional[dict], action: str, amoun
             reasons.append(f"Voice sounds human (deepfake score {_fmt(df_score)})")
         else:
             reasons.append(f"Unrecognised deepfake verdict: {verdict}")
-    elif deepfake_note:
-        reasons.append(deepfake_note)
+    else:
+        # Fail closed: without a deepfake verdict the voice is unverified, so the action can't be approved.
+        score += 30
+        reasons.append(deepfake_note or "Deepfake check did not run — voice not verified as human")
 
     # --- speaker ---
     if speaker:
@@ -142,11 +146,38 @@ def assess(deepfake: Optional[dict], speaker: Optional[dict], action: str, amoun
     score = max(0, min(100, int(score)))
     if verdict == "fake" or score >= 70:
         decision = "BLOCK"
-    elif score >= 35 or verdict == "not_sure":
+    elif score >= 35 or verdict == "not_sure" or not deepfake:
         decision = "STEP_UP"
     else:
         decision = "APPROVE"
     return {"score": score, "level": level_for(score), "decision": decision, "reasons": reasons}
+
+
+def feedback_from_response(assessment: dict, response: str) -> list[dict]:
+    """What the customer's reply on the trusted channel proves about each DetectifAI verdict.
+
+    "me"     -> the caller was the real customer: deepfake real = correct, fake = wrong;
+                speaker match = correct, no_match = wrong.
+    "not_me" -> the caller was not the customer: speaker match = wrong, no_match = correct;
+                deepfake fake = correct; real proves nothing (a human impostor is real speech).
+    not_sure verdicts are never reported. Returns [{operation_id, signal, correct}].
+    """
+    out = []
+    df = assessment.get("deepfake") or {}
+    sp = assessment.get("speaker") or {}
+    verdict, decision = df.get("verdict"), sp.get("decision")
+    if df.get("operation_id"):
+        correct = None
+        if response == "me" and verdict in ("real", "fake"):
+            correct = verdict == "real"
+        elif response == "not_me" and verdict == "fake":
+            correct = True
+        if correct is not None:
+            out.append({"operation_id": df["operation_id"], "signal": "deepfake", "correct": correct})
+    if sp.get("operation_id") and decision in ("match", "no_match"):
+        correct = (decision == "match") if response == "me" else (decision == "no_match")
+        out.append({"operation_id": sp["operation_id"], "signal": "speaker", "correct": correct})
+    return out
 
 
 def _action_phrase(action: str, amount, with_article: bool = True) -> str:
