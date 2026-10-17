@@ -107,7 +107,7 @@ adb reverse tcp:8000 tcp:8000               # the app opens http://localhost:800
 | Setting | Effect |
 |---|---|
 | `CALLSHIELD_ATTACK_LAB=0` | Turns the Attack Lab off (it is otherwise served only to laptop-local requests: loopback client, loopback Host/Origin, no proxy/tunnel headers) |
-| `CALLSHIELD_CALL_CODE=…` | Requires `?code=…` on the call socket (leave unset on the judges' link) |
+| `CALLSHIELD_CALL_CODE=…` | Requires `?code=…` on the call socket (leave unset on a public demo link) |
 | `CALLSHIELD_DEBUG_AUDIO=1` | Keeps a copy of enrollment / check audio in `data/debug/` for diagnosis |
 | `CALLSHIELD_CLONER_URL`, `CALLSHIELD_CLONER_TOKEN` | Where the cloning service runs and its shared secret |
 
@@ -159,7 +159,7 @@ operation (50). This is also the business model: **cost per protected transactio
 - **edge-tts** (Microsoft neural voice `en-IN-NeerjaNeural`) for Neerja's pre-generated prompts
 - **Chatterbox** (Resemble AI, open-source, local GPU) and optionally **ElevenLabs** for consented test clones
 - **Claude Code** (AI coding assistant) for code and docs
-- cloudflared (public HTTPS link for judges), if used
+- cloudflared (public HTTPS link), if used
 
 ## 10. Team
 
@@ -169,4 +169,4 @@ operation (50). This is also the business model: **cost per protected transactio
 | [Member 2] | [e.g. frontend + audio] | [ ] |
 | [Member 3] | [e.g. product, pitch, demo; enrolled "customer" voice] | [ ] |
 
-More: [`DEMO.md`](DEMO.md) (judge demo script), [`pitch/deck.md`](pitch/deck.md) (deck).
+More: [`DEMO.md`](DEMO.md) (live demo runbook), [`pitch/script.md`](pitch/script.md) (presentation script), `pitch/CallShield_Final.pptx` (deck).

@@ -1,7 +1,7 @@
 """Caps paid DetectifAI operations requested through the public tunnel link.
 
 Requests from the presenter's laptop (no proxy/tunnel headers) are never limited. Requests that arrive via a
-tunnel (Cloudflare adds cf-connecting-ip etc.) share a small hourly budget, so a leaked judge link can't drain
+tunnel (Cloudflare adds cf-connecting-ip etc.) share a small hourly budget, so a leaked public link can't drain
 the team's credits. Limits are configurable with env vars:
   CALLSHIELD_PUBLIC_CHECKS_PER_HOUR   (default 8)   live checks via the public link, all visitors together
   CALLSHIELD_PUBLIC_CHECKS_PER_IP     (default 4)   per visitor IP per hour

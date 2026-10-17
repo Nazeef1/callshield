@@ -1,4 +1,4 @@
-// CallShield final deck: a title slide, then 5 slides in the required order (Problem, Solution, DetectifAI, Impact, Scale).
+// CallShield final deck: title, 5 slides in the required order (Problem, Solution, DetectifAI, Impact, Scale), closing link.
 //   cd pitch/build && node build_final.js   ->  pitch/CallShield_Final.pptx
 const fs = require('fs');
 const path = require('path');
@@ -211,6 +211,22 @@ pres.defineSlideMaster({ title: 'CS_TITLE', background: { color: C.text1 } });
     t(s, v, { x: 7.05, y: y + 0.5, w: 5.45, h: 0.7, fontSize: 13, valign: 'top' });
   });
   s.addNotes('The design is the business model: banks pay per protected transaction, two DetectifAI checks per high-risk request and nothing for the rest of the call, about 75 times fewer checks than scanning whole calls (assumptions on the slide). Integration uses the audio streams contact centres already expose, so Neerja becomes one step in the bank\'s phone menu. Risks we have answers for: phone audio (measured and fixed), replay (live passphrase plus customer alert, prompted phrases next), and privacy (opt-in enrollment, delete on request under DPDP).');
+}
+
+// ---------------------------------------------------------------- Closing: project link
+{
+  pres.addSection({ title: 'Code' });
+  const s = pres.addSlide({ masterName: 'CS_TITLE', sectionTitle: 'Code' });
+  const logo = fs.readFileSync(path.join(__dirname, 'logo.png')).toString('base64');
+  s.addImage({ data: `image/png;base64,${logo}`, x: 0.72, y: 1.55, w: 1.0, h: 1.0, objectName: 'logo', altText: 'CallShield shield logo' });
+  t(s, 'Thank you', { x: 0.9, y: 2.75, w: 9, h: 1.1, fontSize: 54, bold: true, objectName: 'thanks' });
+  t(s, 'A fraudster can copy your voice. CallShield makes sure it can’t move your money.',
+    { x: 0.9, y: 3.85, w: 11, h: 0.6, fontSize: 20, color: C.background2, objectName: 'closing-line' });
+  card(s, 0.9, 4.8, 8.6, 1.05, C.text2, 'repo-card');
+  t(s, 'CODE', { x: 1.2, y: 4.95, w: 2, h: 0.3, fontSize: 11, bold: true, color: C.background2, charSpacing: 3 });
+  t(s, [{ text: 'github.com/Nazeef1/callshield', options: { hyperlink: { url: 'https://github.com/Nazeef1/callshield' } } }],
+    { x: 1.2, y: 5.25, w: 8.1, h: 0.5, fontSize: 22, bold: true, color: C.accent1, objectName: 'repo-link' });
+  s.addNotes('Thank you. All of the code, the Android app, the receive screen and the Attack Lab, is public at github.com/Nazeef1/callshield.');
 }
 
 (async () => {
