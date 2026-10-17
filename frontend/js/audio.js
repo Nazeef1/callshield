@@ -114,11 +114,13 @@ export class MicCapture {
     this.level = 0;
   }
 
-  async start() {
+  /** start() captures the mic; start({ stream }) captures any audio MediaStream (e.g. a call's remote audio). */
+  async start({ stream = null } = {}) {
     if (this.running) return;
     if (!MicCapture.isSupported()) throw new Error('Microphone capture is not supported in this browser');
     // Keep the raw voice: no noise suppression / AGC (they smear the artefacts deepfake detection looks for).
-    this.stream = await navigator.mediaDevices.getUserMedia({
+    this.ownsStream = !stream;
+    this.stream = stream || await navigator.mediaDevices.getUserMedia({
       audio: { channelCount: 1, echoCancellation: true, noiseSuppression: false, autoGainControl: false },
       video: false,
     });
@@ -188,7 +190,7 @@ export class MicCapture {
     try { this.node && this.node.disconnect(); } catch { /* ignore */ }
     try { this.sink && this.sink.disconnect(); } catch { /* ignore */ }
     try { this.ctx && this.ctx.close(); } catch { /* ignore */ }
-    if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
+    if (this.stream && this.ownsStream) this.stream.getTracks().forEach((t) => t.stop());
     this.stream = null;
     this.ctx = null;
     this.node = null;
@@ -196,6 +198,15 @@ export class MicCapture {
   }
 
   onData(fn) { this.listeners.add(fn); return () => this.listeners.delete(fn); }
+
+  /** A local copy of the captured audio as a live MediaStreamTrack (Chrome's speech recognition rejects
+   *  a call's remote WebRTC track but takes a Web Audio one). Stops with the capture. */
+  tapTrack() {
+    if (!this.running) return null;
+    const dest = this.ctx.createMediaStreamDestination();
+    this.source.connect(dest);
+    return dest.stream.getAudioTracks()[0];
+  }
 
   _ingest(chunk) {
     if (!this.running) return;

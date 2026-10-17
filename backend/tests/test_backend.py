@@ -146,7 +146,34 @@ class RiskTests(unittest.TestCase):
         r = risk.assess(None, {"decision": "match", "similarity": 0.8, "threshold": 0.53}, "fund_transfer",
                         deepfake_note="Deepfake check unavailable (audio_too_short): too short")
         self.assertEqual(r["reasons"][0], "Deepfake check unavailable (audio_too_short): too short")
-        self.assertEqual(r["score"], 10)
+        self.assertEqual(r["score"], 40)
+        self.assertEqual(r["decision"], "STEP_UP")
+
+    def test_missing_deepfake_fails_closed(self):
+        # Strong voice match + low-risk action would score 10, but no deepfake verdict must never APPROVE.
+        r = risk.assess(None, {"decision": "match", "similarity": 0.9, "threshold": 0.53}, "beneficiary_add")
+        self.assertEqual(r["score"], 40)
+        self.assertEqual(r["decision"], "STEP_UP")
+        self.assertIn("Deepfake check did not run — voice not verified as human", r["reasons"])
+        self.assertEqual(risk.assess(None, {"decision": "no_match", "similarity": 0.1, "threshold": 0.53},
+                                     "fund_transfer", 50000)["decision"], "BLOCK")
+
+    def test_feedback_from_customer_response(self):
+        clone = {"deepfake": {"verdict": "fake", "operation_id": "op_df"},
+                 "speaker": {"decision": "match", "operation_id": "op_sp"}}
+        self.assertEqual(risk.feedback_from_response(clone, "not_me"), [
+            {"operation_id": "op_df", "signal": "deepfake", "correct": True},
+            {"operation_id": "op_sp", "signal": "speaker", "correct": False}])
+        self.assertEqual(risk.feedback_from_response(clone, "me"), [
+            {"operation_id": "op_df", "signal": "deepfake", "correct": False},
+            {"operation_id": "op_sp", "signal": "speaker", "correct": True}])
+        impostor = {"deepfake": {"verdict": "real", "operation_id": "op_df"},
+                    "speaker": {"decision": "no_match", "operation_id": "op_sp"}}
+        # a human impostor is real speech: "not me" says nothing about the deepfake verdict
+        self.assertEqual(risk.feedback_from_response(impostor, "not_me"),
+                         [{"operation_id": "op_sp", "signal": "speaker", "correct": True}])
+        unsure = {"deepfake": {"verdict": "not_sure", "operation_id": "op_df"}, "speaker": None}
+        self.assertEqual(risk.feedback_from_response(unsure, "me"), [])
 
     def test_alerts(self):
         a = risk.build_alert("BLOCK", "fund_transfer", 50000)
@@ -497,9 +524,16 @@ class AppMockModeTests(unittest.TestCase):
         # customer responds to the block alert
         events.clear()
         r = self.client.post(f"/api/alerts/{d['check_id']}/respond", json={"response": "not_me"})
-        self.assertEqual(r.json(), {"ok": True})
+        self.assertTrue(r.json()["ok"])
+        sent = r.json()["auto_feedback"]
+        # clone blocked + customer says "not me" -> DetectifAI's fake verdict is confirmed correct
+        self.assertIn({"operation_id": d["deepfake"]["operation_id"], "signal": "deepfake", "correct": True,
+                       "ok": True}, sent)
         self.assertEqual(events[0][0], "customer_response")
         self.assertEqual(events[0][1]["response"], "not_me")
+        self.assertEqual(events[0][1]["auto_feedback"], sent)
+        again = self.client.post(f"/api/alerts/{d['check_id']}/respond", json={"response": "not_me"}).json()
+        self.assertEqual(again["auto_feedback"], sent)  # reported once, not on every tap
         stored = [a for a in self.client.get("/api/assessments").json()["assessments"]
                   if a["check_id"] == d["check_id"]][0]
         self.assertEqual(stored["customer_response"]["response"], "not_me")

@@ -24,7 +24,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette.staticfiles import StaticFiles
 
-from . import attack, risk
+from . import attack, calls, risk
 from .public_limit import PublicLimiter
 from .audio import wav_duration
 from .detectif import (MOCK_SCENARIOS, PRICE_PER_OPERATION, DetectifError, LiveClient, MockClient,
@@ -42,6 +42,7 @@ CREDITS_TTL = 30.0
 HEALTH_TTL = 30.0
 SPEAKERS_TTL = 60.0
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
+MAX_TRANSCRIBE_BYTES = 1024 * 1024
 MIN_VERIFY_SECONDS = 3.5     # DetectifAI verify needs 3-60 s
 MIN_DEEPFAKE_SECONDS = 4.0   # deepfake check needs MORE than 4 s
 MAX_VERIFY_SECONDS = 60.0
@@ -546,9 +547,21 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
                                                                        "created_at": created_at})
         if updated is None:
             raise ApiError(404, "not_found", f"No assessment with check_id {check_id}.")
+        # Close the loop: the customer's answer tells DetectifAI which verdicts were right (free calls).
+        sent = updated.get("auto_feedback")
+        if sent is None:
+            sent = []
+            for fb in risk.feedback_from_response(updated, body.response):
+                try:
+                    await client.feedback(fb["operation_id"], fb["correct"])
+                    fb["ok"] = True
+                except DetectifError as e:
+                    fb["ok"], fb["error"] = False, e.code
+                sent.append(fb)
+            store.update_assessment(check_id, auto_feedback=sent)
         broadcaster.publish("customer_response", {"check_id": check_id, "response": body.response,
-                                                  "created_at": created_at})
-        return {"ok": True}
+                                                  "created_at": created_at, "auto_feedback": sent})
+        return {"ok": True, "auto_feedback": sent}
 
     @app.post("/api/feedback")
     async def feedback(body: FeedbackBody):
@@ -569,6 +582,26 @@ def create_app(mode: Optional[str] = None, client=None, store_path=None, fronten
     # Attack Lab (local red-team, laptop-only): /api/attack/* + a guarded /attack.html
     frontend_path = Path(frontend_dir) if frontend_dir else ROOT / "frontend"
     attack.register(app, cloner, frontend_path)
+
+    # Phone-to-console helpline calls (WebRTC signaling): /api/call/ws
+    calls.register(app)
+
+    # Live call transcript: the console sends short caller utterances; local Whisper on the GPU service.
+    @app.post("/api/transcribe")
+    async def transcribe(file: UploadFile = File(...), language: str = Form("en")):
+        data = await file.read()
+        if not data:
+            raise ApiError(400, "empty_file", "The uploaded audio file is empty.")
+        if len(data) > MAX_TRANSCRIBE_BYTES:
+            raise ApiError(413, "file_too_large", "Utterances must be under 1 MB (about 30 s of 16 kHz audio).")
+        lang = (language or "en").split("-")[0].lower()
+        if lang not in ("en", "hi"):
+            raise ApiError(400, "invalid_language", "language must be en or hi.")
+        try:
+            body = await cloner.transcribe(data, lang)
+        except attack.ClonerError as e:
+            raise ApiError(e.status, "asr_unavailable" if e.status in (503, 504) else e.code, e.message) from None
+        return {"text": str(body.get("text") or ""), "ms": body.get("ms"), "model": body.get("model")}
 
     # Static frontend LAST so /api/* routes win.
     app.mount("/", LazyStatic(frontend_path), name="frontend")

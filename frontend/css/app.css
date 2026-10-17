@@ -837,3 +837,8 @@ textarea.script-text { height: auto; min-height: 104px; padding: 10px 12px; line
 .tag.warn { color: var(--warn); background: var(--warn-soft); }
 .tag.danger { color: var(--danger); background: var(--danger-soft); }
 @media (max-width: 640px) { .guide-table { font-size: 0.82rem; } .guide-hero h1 { font-size: 1.6rem; } }
+
+/* ---- incoming helpline call (agent console) ---- */
+.incoming { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 8px 0; padding: 10px 12px;
+  border: 1px solid var(--accent); border-radius: 10px; }
+.incoming-who { flex: 1; font-weight: 650; }
