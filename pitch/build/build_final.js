@@ -59,6 +59,9 @@ pres.defineSlideMaster({ title: 'CS_TITLE', background: { color: C.text1 } });
   t(s, 'A voice-clone fraud guard for bank helpline calls', { x: 0.9, y: 4.25, w: 10, h: 0.6, fontSize: 24, color: C.background2, objectName: 'tagline' });
   t(s, [{ text: 'Powered by ', options: { color: C.background2 } }, { text: 'DetectifAI', options: { bold: true, color: C.accent1 } }],
     { x: 0.9, y: 4.9, w: 8, h: 0.5, fontSize: 18, objectName: 'powered' });
+  t(s, [{ text: 'Team 1', options: { bold: true, color: C.accent1 } },
+    { text: '   Zain Mahedi (lead)  ·  Nazeef Ahsan Rafiqui', options: { color: C.background1 } }],
+    { x: 0.9, y: 6.05, w: 11.5, h: 0.4, fontSize: 16, objectName: 'team' });
   t(s, 'UNCLONE AI Hackathon  ·  Track 01: Unclone Finance  ·  B.M.S. College of Engineering  ·  17 Oct 2026',
     { x: 0.9, y: 6.55, w: 11.5, h: 0.4, fontSize: 12, color: C.background2, objectName: 'event' });
   s.addNotes('Hi, we are team CallShield. Our product guards bank helpline calls against cloned voices, and DetectifAI is the engine that makes every decision.');

@@ -162,10 +162,6 @@ operation (50). This is also the business model: **cost per protected transactio
 
 ## 10. Team
 
-| Name | Role | College / programme |
-|---|---|---|
-| [Member 1] | [e.g. backend + DetectifAI integration] | [ ] |
-| [Member 2] | [e.g. frontend + audio] | [ ] |
-| [Member 3] | [e.g. product, pitch, demo; enrolled "customer" voice] | [ ] |
+**Team 1**: Zain Mahedi (team lead) · Nazeef Ahsan Rafiqui
 
 More: [`DEMO.md`](DEMO.md) (live demo runbook), [`pitch/script.md`](pitch/script.md) (presentation script), `pitch/CallShield_Final.pptx` (deck).
